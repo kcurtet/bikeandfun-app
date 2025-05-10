@@ -15,6 +15,7 @@ interface Rental {
     id: number;
     bike_type_id: number;
     rental_pricing_id: number;
+    quantity: number;
     rental_pricing?: {
       duration: number;
       duration_unit: string;
@@ -73,6 +74,7 @@ export default function RentalHistoryPage() {
             id,
             bike_type_id,
             rental_pricing_id,
+            quantity,
             rental_pricing:rental_pricing_id (
               duration,
               duration_unit,
@@ -197,23 +199,21 @@ export default function RentalHistoryPage() {
               </div>
 
               <div className="space-y-2 mb-4">
-                {rental.rental_items?.map((item, index) => (
-                  <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
-                    <div className="space-y-1">
-                      <span className="font-medium text-gray-900">
-                        {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                      </span>
-                      {item.rental_pricing && (
-                        <span className="text-sm text-gray-600 block">
-                          {item.rental_pricing.duration} {item.rental_pricing.duration_unit}
+                {rental.rental_items?.map((item) => (
+                  <div key={item.id} className="bg-gray-50 p-3 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="font-medium text-gray-900">
+                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
                         </span>
-                      )}
-                    </div>
-                    {item.rental_pricing && (
-                      <span className="font-bold text-gray-900 text-lg">
-                        ${item.rental_pricing.price.toFixed(2)}
+                        <span className="text-gray-500 ml-2">
+                          ({item.quantity} × {item.rental_pricing?.duration} {item.rental_pricing?.duration_unit})
+                        </span>
+                      </div>
+                      <span className="font-medium text-gray-900">
+                        ${(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}
                       </span>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -222,7 +222,7 @@ export default function RentalHistoryPage() {
                 <span className="text-gray-600 font-medium">Total Amount:</span>
                 <span className="text-xl font-bold text-gray-900">
                   ${rental.rental_items?.reduce((total, item) => 
-                    total + (item.rental_pricing?.price || 0), 0
+                    total + ((item.rental_pricing?.price || 0) * item.quantity), 0
                   ).toFixed(2)}
                 </span>
               </div>
@@ -268,23 +268,19 @@ export default function RentalHistoryPage() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Bikes</h3>
                 <div className="space-y-3">
                   {selectedRental.rental_items?.map((item) => (
-                    <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm">
-                      <div className="flex justify-between items-start">
-                        <div className="space-y-1">
-                          <p className="font-medium text-gray-900">
+                    <div key={item.id} className="bg-white p-3 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="font-medium text-gray-900">
                             {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                          </p>
-                          {item.rental_pricing && (
-                            <p className="text-sm text-gray-600">
-                              Duration: {item.rental_pricing.duration} {item.rental_pricing.duration_unit}
-                            </p>
-                          )}
+                          </span>
+                          <span className="text-gray-500 ml-2">
+                            ({item.quantity} × {item.rental_pricing?.duration} {item.rental_pricing?.duration_unit})
+                          </span>
                         </div>
-                        {item.rental_pricing && (
-                          <p className="text-xl font-bold text-gray-900">
-                            ${item.rental_pricing.price.toFixed(2)}
-                          </p>
-                        )}
+                        <span className="font-medium text-gray-900">
+                          ${(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -301,7 +297,7 @@ export default function RentalHistoryPage() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Amount</h3>
                   <p className="text-2xl font-bold text-gray-900">
                     ${selectedRental.rental_items?.reduce((total, item) => 
-                      total + (item.rental_pricing?.price || 0), 0
+                      total + ((item.rental_pricing?.price || 0) * item.quantity), 0
                     ).toFixed(2)}
                   </p>
                 </div>

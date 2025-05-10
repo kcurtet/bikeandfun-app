@@ -16,6 +16,7 @@ interface Rental {
     id: number;
     bike_type_id: number;
     rental_pricing_id: number;
+    quantity: number;
     rental_pricing?: {
       duration: number;
       duration_unit: string;
@@ -112,6 +113,7 @@ export default function RentalsPage() {
     items: [] as {
       bike_type_id: string;
       rental_pricing_id: string;
+      quantity: number;
     }[]
   });
   const [availableRates, setAvailableRates] = useState<RentalRate[]>([]);
@@ -135,7 +137,9 @@ export default function RentalsPage() {
             id,
             bike_type_id,
             rental_pricing_id,
+            quantity,
             rental_pricing:rental_pricing_id (
+              id,
               duration,
               duration_unit,
               price
@@ -237,7 +241,7 @@ export default function RentalsPage() {
   const addNewBikeToRental = () => {
     setNewRental(prev => ({
       ...prev,
-      items: [...prev.items, { bike_type_id: '', rental_pricing_id: '' }]
+      items: [...prev.items, { bike_type_id: '', rental_pricing_id: '', quantity: 1 }]
     }));
   };
 
@@ -271,6 +275,7 @@ export default function RentalsPage() {
         rental_id: rentalData.id,
         bike_type_id: parseInt(item.bike_type_id),
         rental_pricing_id: parseInt(item.rental_pricing_id),
+        quantity: item.quantity,
       }));
 
       const { error: itemsError } = await supabase
@@ -413,23 +418,21 @@ export default function RentalsPage() {
               </div>
 
               <div className="space-y-2 mb-4">
-                {rental.rental_items?.map((item, index) => (
-                  <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
-                    <div className="space-y-1">
-                      <span className="font-medium text-gray-900">
-                        {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                      </span>
-                      {item.rental_pricing && (
-                        <span className="text-sm text-gray-600 block">
-                          {item.rental_pricing.duration} {item.rental_pricing.duration_unit}
+                {rental.rental_items?.map((item) => (
+                  <div key={item.id} className="bg-gray-50 p-3 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <span className="font-medium text-gray-900">
+                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
                         </span>
-                      )}
-                    </div>
-                    {item.rental_pricing && (
-                      <span className="font-bold text-gray-900 text-lg">
-                        ${item.rental_pricing.price.toFixed(2)}
+                        <span className="text-gray-500 ml-2">
+                          ({item.quantity} × {item.rental_pricing?.duration} {item.rental_pricing?.duration_unit})
+                        </span>
+                      </div>
+                      <span className="font-medium text-gray-900">
+                        ${(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}
                       </span>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -456,7 +459,7 @@ export default function RentalsPage() {
                   <span className="text-gray-600 font-medium">Total Amount:</span>
                   <span className="text-xl font-bold text-gray-900">
                     ${rental.rental_items?.reduce((total, item) => 
-                      total + (item.rental_pricing?.price || 0), 0
+                      total + ((item.rental_pricing?.price || 0) * item.quantity), 0
                     ).toFixed(2)}
                   </span>
                 </div>
@@ -547,26 +550,51 @@ export default function RentalsPage() {
                     </select>
                   </div>
                   {item.bike_type_id && (
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Duration
-                      </label>
-                      <select
-                        value={item.rental_pricing_id}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDurationChange(index, e.target.value)}
-                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        required
-                      >
-                        <option value="">Select duration</option>
-                        {rentalRates
-                          .filter(r => r.bike_type_id === parseInt(item.bike_type_id))
-                          .map((rate) => (
-                            <option key={rate.id} value={rate.id}>
-                              {rate.duration} {rate.duration_unit}{rate.duration > 1 ? 's' : ''} - ${rate.price.toFixed(2)}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
+                    <>
+                      <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2">
+                          Duration
+                        </label>
+                        <select
+                          value={item.rental_pricing_id}
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDurationChange(index, e.target.value)}
+                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                          required
+                        >
+                          <option value="">Select duration</option>
+                          {rentalRates
+                            .filter(r => r.bike_type_id === parseInt(item.bike_type_id))
+                            .map((rate) => (
+                              <option key={rate.id} value={rate.id}>
+                                {rate.duration} {rate.duration_unit}{rate.duration > 1 ? 's' : ''} - ${rate.price.toFixed(2)}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="mb-4">
+                        <label className="block text-gray-700 text-sm font-bold mb-2">
+                          Quantity
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const updatedItems = [...newRental.items];
+                            updatedItems[index] = {
+                              ...updatedItems[index],
+                              quantity: parseInt(e.target.value) || 1
+                            };
+                            setNewRental(prev => ({
+                              ...prev,
+                              items: updatedItems
+                            }));
+                          }}
+                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                          required
+                        />
+                      </div>
+                    </>
                   )}
                 </div>
               ))}

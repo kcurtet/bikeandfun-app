@@ -24,32 +24,32 @@ INSERT INTO public.customers (name, email, phone) VALUES
 -- Insert sample rental pricing
 INSERT INTO public.rental_pricing (bike_type_id, duration, duration_unit, price, is_active) VALUES
 (1, 1, 'hour', 15.00, true),    -- Mountain Bike hourly
+(1, 4, 'hour', 45.00, true),    -- Mountain Bike 4 hours
 (1, 1, 'day', 50.00, true),     -- Mountain Bike daily
 (1, 1, 'week', 250.00, true),   -- Mountain Bike weekly
 (2, 1, 'hour', 12.00, true),    -- Road Bike hourly
+(2, 2, 'day', 75.00, true),     -- Road Bike 2 days
 (2, 1, 'day', 40.00, true),     -- Road Bike daily
 (3, 1, 'hour', 20.00, true),    -- Electric Bike hourly
 (3, 1, 'day', 70.00, true),     -- Electric Bike daily
+(3, 1, 'week', 350.00, true),   -- Electric Bike weekly
 (4, 1, 'hour', 10.00, true),    -- City Bike hourly
 (4, 1, 'day', 35.00, true),     -- City Bike daily
 (5, 1, 'hour', 8.00, true);     -- Kids Bike hourly
 
 -- Insert sample rentals
 INSERT INTO public.rentals (customer_id, status, start_date) VALUES
-(1, 'completed', '2024-05-01 09:00:00'),  -- John Doe's rental
-(2, 'active', '2024-05-02 10:00:00'),     -- Jane Smith's rental
-(3, 'completed', '2024-05-03 11:00:00'),  -- Bob Johnson's rental
-(4, 'active', '2024-05-04 13:00:00'),     -- Alice Brown's rental
-(5, 'canceled', '2024-05-05 14:00:00');   -- Charlie Wilson's rental
+(1, 'active', '2024-05-02 14:30:00+00'),
+(2, 'completed', '2024-05-01 10:00:00+00'),
+(3, 'canceled', '2024-05-03 09:15:00+00');
 
 -- Insert sample rental items
-INSERT INTO public.rental_items (rental_id, bike_type_id, rental_pricing_id) VALUES
-(1, 1, 2),  -- John Doe rented a Mountain Bike for a day
-(2, 3, 6),  -- Jane Smith rented an Electric Bike for an hour
-(2, 4, 8),  -- Jane Smith also rented a City Bike for a day
-(3, 2, 4),  -- Bob Johnson rented a Road Bike for an hour
-(4, 4, 8),  -- Alice Brown rented a City Bike for a day
-(5, 5, 10); -- Charlie Wilson's Kids Bike rental was canceled
+INSERT INTO public.rental_items (rental_id, bike_type_id, rental_pricing_id, quantity) VALUES
+(1, 1, 3, 2),  -- 2 Mountain Bikes for 1 day ($50 each)
+(1, 3, 8, 1),  -- 1 Electric Bike for 1 day ($70)
+(2, 1, 1, 2),  -- 2 Mountain Bikes for 1 hour
+(2, 2, 4, 1),  -- 1 Road Bike for 1 day
+(3, 2, 6, 1);  -- 1 Road Bike for 2 days
 
 -- Insert sample repairs
 INSERT INTO public.repairs (customer_id, bike_model, repair_start, repair_end, delivery_date, price, notes, status) VALUES
