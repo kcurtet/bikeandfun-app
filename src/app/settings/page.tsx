@@ -59,11 +59,32 @@ export default function SettingsPage() {
     try {
       const { data, error } = await supabase
         .from('rental_pricing')
-        .select('*')
-        .order('bike_type_id');
+        .select('*');
 
       if (error) throw error;
-      setRentalPricing(data || []);
+      
+      // Ordenar los datos en el cliente por tipo y duración normalizada
+      const sortedData = data?.sort((a, b) => {
+        // Primero ordenar por tipo de bicicleta
+        if (a.bike_type_id !== b.bike_type_id) {
+          return a.bike_type_id - b.bike_type_id;
+        }
+        
+        // Si es el mismo tipo, ordenar por duración
+        const getMinutes = (pricing: RentalPricing) => {
+          const duration = pricing.duration;
+          switch (pricing.duration_unit) {
+            case 'hour': return duration * 60;
+            case 'day': return duration * 24 * 60;
+            case 'week': return duration * 7 * 24 * 60;
+            default: return 0;
+          }
+        };
+        
+        return getMinutes(a) - getMinutes(b);
+      });
+
+      setRentalPricing(sortedData || []);
     } catch (error) {
       console.error('Error fetching rental pricing:', error);
       setError('Error al cargar los precios de alquiler');
@@ -171,16 +192,16 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Configuración</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-8">Configuración</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Bike Types Section */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Tipos de Bicicletas</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Tipos de Bicicletas</h2>
             <button
               onClick={() => setShowAddBikeTypeModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -193,7 +214,7 @@ export default function SettingsPage() {
             {bikeTypes.map((type) => (
               <div key={type.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                 <div>
-                  <h3 className="font-medium text-gray-900">{type.type_name}</h3>
+                  <h3 className="text-base font-medium text-gray-900">{type.type_name}</h3>
                   <p className="text-sm text-gray-600">{type.description}</p>
                 </div>
                 <button
@@ -212,10 +233,10 @@ export default function SettingsPage() {
         {/* Rental Pricing Section */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Precios de Alquiler</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Precios de Alquiler</h2>
             <button
               onClick={() => setShowAddPricingModal(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
@@ -225,14 +246,14 @@ export default function SettingsPage() {
           </div>
 
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="filter_bike_type">
+            <label className="block text-gray-700 text-sm font-medium mb-2" htmlFor="filter_bike_type">
               Filtrar por tipo de bicicleta
             </label>
             <select
               id="filter_bike_type"
               value={selectedBikeType}
               onChange={(e) => setSelectedBikeType(e.target.value)}
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline text-sm"
             >
               <option value="">Todos los tipos</option>
               {bikeTypes.map((type) => (
@@ -247,12 +268,11 @@ export default function SettingsPage() {
             {filteredPricing.map((pricing) => (
               <div key={pricing.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                 <div>
-                  <h3 className="font-medium text-gray-900">
-                    {bikeTypes.find(t => t.id === pricing.bike_type_id)?.type_name}
+                  <h3 className="text-base font-medium text-gray-900">
+                    {bikeTypes.find(type => type.id === pricing.bike_type_id)?.type_name}
                   </h3>
                   <p className="text-sm text-gray-600">
-                    {pricing.duration} {pricing.duration_unit}
-                    {pricing.duration > 1 ? 's' : ''} - {pricing.price.toFixed(2)}€
+                    {pricing.duration} {pricing.duration_unit}{pricing.duration > 1 ? 's' : ''} - {pricing.price.toFixed(2)}€
                   </p>
                 </div>
                 <button

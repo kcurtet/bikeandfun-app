@@ -324,8 +324,8 @@ export default function RepairsPage() {
                     {repair.bike_model}
                   </p>
                 </div>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(repair.status)}`}>
-                  {translateStatus(repair.status)}
+                <span className={`px-3 py-1 status-badge rounded-full ${getStatusColor(repair.status)}`}>
+                  {repair.status.charAt(0).toUpperCase() + repair.status.slice(1)}
                 </span>
               </div>
               
@@ -360,7 +360,7 @@ export default function RepairsPage() {
                     </svg>
                     Precio:
                   </span>
-                  <span className="font-medium">
+                  <span className="price">
                     {repair.price.toFixed(2)}€
                   </span>
                 </div>
