@@ -184,37 +184,43 @@ export default function RentalHistoryPage() {
           {rentals.map((rental) => (
             <div 
               key={rental.id} 
-              className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow cursor-pointer"
+              className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer"
               onClick={() => setSelectedRental(rental)}
             >
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {customers.find(c => c.id === rental.customer_id)?.name}
-                  </h3>
-                  <div className="text-sm text-gray-600">
-                    {rental.rental_items?.map((item, index) => (
-                      <div key={item.id} className="flex justify-between items-center">
-                        <span>
-                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                          {item.rental_pricing && ` - ${item.rental_pricing.duration} ${item.rental_pricing.duration_unit}`}
-                        </span>
-                        {item.rental_pricing && (
-                          <span className="font-medium ml-2">
-                            ${item.rental_pricing.price.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(rental.status)}`}>
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {customers.find(c => c.id === rental.customer_id)?.name}
+                </h3>
+                <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(rental.status)}`}>
                   {rental.status}
                 </span>
               </div>
-              <div className="flex justify-between font-semibold text-gray-900 pt-2 border-t border-gray-200">
-                <span>Total Amount:</span>
-                <span>
+
+              <div className="space-y-2 mb-4">
+                {rental.rental_items?.map((item, index) => (
+                  <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
+                    <div className="space-y-1">
+                      <span className="font-medium text-gray-900">
+                        {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
+                      </span>
+                      {item.rental_pricing && (
+                        <span className="text-sm text-gray-600 block">
+                          {item.rental_pricing.duration} {item.rental_pricing.duration_unit}
+                        </span>
+                      )}
+                    </div>
+                    {item.rental_pricing && (
+                      <span className="font-bold text-gray-900 text-lg">
+                        ${item.rental_pricing.price.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center py-3 border-t border-gray-200">
+                <span className="text-gray-600 font-medium">Total Amount:</span>
+                <span className="text-xl font-bold text-gray-900">
                   ${rental.rental_items?.reduce((total, item) => 
                     total + (item.rental_pricing?.price || 0), 0
                   ).toFixed(2)}
@@ -228,9 +234,9 @@ export default function RentalHistoryPage() {
       {/* Rental Details Modal */}
       {selectedRental && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold">Rental Details</h2>
+          <div className="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Rental Details</h2>
               <button
                 onClick={() => setSelectedRental(null)}
                 className="text-gray-500 hover:text-gray-700"
@@ -241,29 +247,31 @@ export default function RentalHistoryPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Customer Information</h3>
-                <p className="text-gray-600">
-                  {customers.find(c => c.id === selectedRental.customer_id)?.name}
-                </p>
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Customer Information</h3>
+                  <p className="text-gray-600">
+                    {customers.find(c => c.id === selectedRental.customer_id)?.name}
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Status</h3>
+                  <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedRental.status)}`}>
+                    {selectedRental.status}
+                  </span>
+                </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Status</h3>
-                <span className={`px-2 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedRental.status)}`}>
-                  {selectedRental.status}
-                </span>
-              </div>
-
-              <div className="col-span-2">
-                <h3 className="text-lg font-semibold mb-2">Bikes</h3>
-                <div className="space-y-2">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Bikes</h3>
+                <div className="space-y-3">
                   {selectedRental.rental_items?.map((item) => (
-                    <div key={item.id} className="p-2 bg-gray-50 rounded">
+                    <div key={item.id} className="bg-white p-4 rounded-lg shadow-sm">
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">
+                        <div className="space-y-1">
+                          <p className="font-medium text-gray-900">
                             {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
                           </p>
                           {item.rental_pricing && (
@@ -273,7 +281,7 @@ export default function RentalHistoryPage() {
                           )}
                         </div>
                         {item.rental_pricing && (
-                          <p className="text-lg font-semibold text-gray-900">
+                          <p className="text-xl font-bold text-gray-900">
                             ${item.rental_pricing.price.toFixed(2)}
                           </p>
                         )}
@@ -283,18 +291,20 @@ export default function RentalHistoryPage() {
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Start Time</h3>
-                <p className="text-gray-600">{formatDateTime(selectedRental.start_date)}</p>
-              </div>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Start Time</h3>
+                  <p className="text-gray-600">{formatDateTime(selectedRental.start_date)}</p>
+                </div>
 
-              <div className="col-span-2">
-                <h3 className="text-lg font-semibold mb-2">Total Amount</h3>
-                <p className="text-xl font-bold text-gray-900">
-                  ${selectedRental.rental_items?.reduce((total, item) => 
-                    total + (item.rental_pricing?.price || 0), 0
-                  ).toFixed(2)}
-                </p>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Amount</h3>
+                  <p className="text-2xl font-bold text-gray-900">
+                    ${selectedRental.rental_items?.reduce((total, item) => 
+                      total + (item.rental_pricing?.price || 0), 0
+                    ).toFixed(2)}
+                  </p>
+                </div>
               </div>
             </div>
           </div>

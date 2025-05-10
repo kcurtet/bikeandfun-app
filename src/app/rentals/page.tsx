@@ -402,43 +402,48 @@ export default function RentalsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {rentals.map((rental) => (
-            <div key={rental.id} className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {customers.find(c => c.id === rental.customer_id)?.name}
-                  </h3>
-                  <div className="text-sm text-gray-600">
-                    {rental.rental_items?.map((item, index) => (
-                      <div key={item.id} className="flex justify-between items-center">
-                        <span>
-                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                          {item.rental_pricing && ` - ${item.rental_pricing.duration} ${item.rental_pricing.duration_unit}`}
-                        </span>
-                        {item.rental_pricing && (
-                          <span className="font-medium ml-2">
-                            ${item.rental_pricing.price.toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(rental.status)}`}>
+            <div key={rental.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xl font-bold text-gray-900">
+                  {customers.find(c => c.id === rental.customer_id)?.name}
+                </h3>
+                <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(rental.status)}`}>
                   {rental.status}
                 </span>
               </div>
+
+              <div className="space-y-2 mb-4">
+                {rental.rental_items?.map((item, index) => (
+                  <div key={item.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
+                    <div className="space-y-1">
+                      <span className="font-medium text-gray-900">
+                        {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
+                      </span>
+                      {item.rental_pricing && (
+                        <span className="text-sm text-gray-600 block">
+                          {item.rental_pricing.duration} {item.rental_pricing.duration_unit}
+                        </span>
+                      )}
+                    </div>
+                    {item.rental_pricing && (
+                      <span className="font-bold text-gray-900 text-lg">
+                        ${item.rental_pricing.price.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
               
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Start:</span>
-                  <span className="font-medium">
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-gray-600">Start Date:</span>
+                  <span className="font-medium text-gray-900">
                     {formatDateTime(rental.start_date)}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">End:</span>
-                  <span className="font-medium">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-gray-600">End Date:</span>
+                  <span className="font-medium text-gray-900">
                     {rental.rental_items && rental.rental_items.length > 0 && rental.rental_items[0].rental_pricing ? 
                       calculateEndDate(
                         rental.start_date,
@@ -447,24 +452,24 @@ export default function RentalsPage() {
                       ) : '-'}
                   </span>
                 </div>
-                <div className="flex justify-between font-semibold text-gray-900 pt-2 border-t border-gray-200">
-                  <span>Total Amount:</span>
-                  <span>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-gray-600 font-medium">Total Amount:</span>
+                  <span className="text-xl font-bold text-gray-900">
                     ${rental.rental_items?.reduce((total, item) => 
                       total + (item.rental_pricing?.price || 0), 0
                     ).toFixed(2)}
                   </span>
                 </div>
-                <div className="mt-4 pt-3 border-t border-gray-200 flex gap-2">
+                <div className="mt-6 pt-4 border-t border-gray-200 flex gap-3">
                   <button
                     onClick={() => handleStatusUpdate(rental.id, rental.status)}
-                    className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
+                    className="flex-1 bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition-colors font-medium"
                   >
                     Complete
                   </button>
                   <button
                     onClick={() => handleCancelRental(rental.id)}
-                    className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+                    className="flex-1 bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 transition-colors font-medium"
                   >
                     Cancel
                   </button>
