@@ -50,11 +50,11 @@ interface RentalRate {
 // Status-related functions
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'active':
+    case 'activo':
       return 'bg-green-100 text-green-800';
-    case 'completed':
+    case 'completado':
       return 'bg-blue-100 text-blue-800';
-    case 'canceled':
+    case 'cancelado':
       return 'bg-red-100 text-red-800';
     default:
       return 'bg-gray-100 text-gray-800';
@@ -63,10 +63,10 @@ const getStatusColor = (status: string) => {
 
 const getNextStatus = (currentStatus: string): string => {
   switch (currentStatus) {
-    case 'active':
-      return 'completed';
-    case 'completed':
-      return 'canceled';
+    case 'activo':
+      return 'completado';
+    case 'completado':
+      return 'cancelado';
     default:
       return currentStatus;
   }
@@ -74,10 +74,10 @@ const getNextStatus = (currentStatus: string): string => {
 
 const getStatusButtonText = (status: string): string => {
   switch (status) {
-    case 'active':
-      return 'Complete Rental';
-    case 'completed':
-      return 'Cancel Rental';
+    case 'activo':
+      return 'Completar Alquiler';
+    case 'completado':
+      return 'Cancelar Alquiler';
     default:
       return '';
   }
@@ -117,6 +117,7 @@ export default function RentalsPage() {
     }[]
   });
   const [availableRates, setAvailableRates] = useState<RentalRate[]>([]);
+  const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   const supabase = createClientComponentClient();
   const router = useRouter();
 
@@ -379,17 +380,20 @@ export default function RentalsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Bike Rentals</h1>
-        <div className="flex gap-4 items-center">
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-gray-900">Alquileres</h1>
+        </div>
+        <div className="flex items-center gap-6">
           <Link
             href="/rentals/history"
             className="text-blue-600 hover:text-blue-800 flex items-center gap-2"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+              <path d="M3.375 3C2.339 3 1.5 3.84 1.5 4.875v.75c0 1.036.84 1.875 1.875 1.875h17.25c1.035 0 1.875-.84 1.875-1.875v-.75C22.5 3.839 21.66 3 20.625 3H3.375Z" />
+              <path fillRule="evenodd" d="m3.087 9 .54 9.176A3 3 0 0 0 6.62 21h10.757a3 3 0 0 0 2.995-2.824L20.913 9H3.087Zm6.163 3.75A.75.75 0 0 1 10 12h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
             </svg>
-            View History
+            <span className="hidden md:inline">Ver Historial</span>
           </Link>
           <button
             onClick={() => setShowAddModal(true)}
@@ -398,7 +402,7 @@ export default function RentalsPage() {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
             </svg>
-            Add Rental
+            <span className="hidden md:inline">Agregar Alquiler</span>
           </button>
         </div>
       </div>
@@ -419,26 +423,31 @@ export default function RentalsPage() {
                   {customers.find(c => c.id === rental.customer_id)?.name}
                 </h3>
                 <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(rental.status)}`}>
-                  {rental.status}
+                  {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
                 </span>
               </div>
 
               <div className="space-y-2 mb-4 flex-1">
                 {rental.rental_items?.map((item) => (
-                  <div key={item.id} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="font-medium text-gray-900">
-                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                        </span>
-                        <span className="text-gray-500 ml-2">
-                          ({item.quantity} × {item.rental_pricing?.duration} {item.rental_pricing?.duration_unit})
-                        </span>
-                      </div>
+                  <div key={item.id} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
                       <span className="font-medium text-gray-900">
-                        ${(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}
+                        {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
                       </span>
+                      <div className="text-gray-500 text-sm">
+                        {item.quantity} × {item.rental_pricing?.duration} {(() => {
+                          const unit = item.rental_pricing?.duration_unit;
+                          const n = item.rental_pricing?.duration;
+                          if (unit === 'hour') return n === 1 ? 'hora' : 'horas';
+                          if (unit === 'day') return n === 1 ? 'día' : 'días';
+                          if (unit === 'week') return n === 1 ? 'semana' : 'semanas';
+                          return unit;
+                        })()}
+                      </div>
                     </div>
+                    <span className="font-medium text-gray-900">
+                      {(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}€
+                    </span>
                   </div>
                 ))}
               </div>
@@ -449,7 +458,7 @@ export default function RentalsPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
-                    Start Date:
+                    Fecha de Inicio:
                   </span>
                   <span className="font-medium text-gray-900">
                     {formatDateTime(rental.start_date)}
@@ -460,7 +469,7 @@ export default function RentalsPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
-                    End Date:
+                    Fecha de Fin:
                   </span>
                   <span className="font-medium text-gray-900">
                     {rental.rental_items && rental.rental_items.length > 0 && rental.rental_items[0].rental_pricing ? 
@@ -477,12 +486,12 @@ export default function RentalsPage() {
                       <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
                     </svg>
-                    Total Amount:
+                    Total:
                   </span>
                   <span className="text-xl font-bold text-gray-900">
-                    ${rental.rental_items?.reduce((total, item) => 
+                    {rental.rental_items?.reduce((total, item) => 
                       total + ((item.rental_pricing?.price || 0) * item.quantity), 0
-                    ).toFixed(2)}
+                    ).toFixed(2)}€
                   </span>
                 </div>
                 <div className="mt-6 flex gap-3">
@@ -493,7 +502,7 @@ export default function RentalsPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
-                    Complete
+                    Completar
                   </button>
                   <button
                     onClick={() => handleCancelRental(rental.id)}
@@ -502,7 +511,7 @@ export default function RentalsPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
-                    Cancel
+                    Cancelar
                   </button>
                 </div>
               </div>
@@ -512,226 +521,252 @@ export default function RentalsPage() {
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold mb-4">Add New Rental</h2>
-            <form onSubmit={handleAddRental}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer">
-                  Customer
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    id="customer"
-                    value={newRental.customer_id}
-                    onChange={(e) => setNewRental(prev => ({ ...prev, customer_id: e.target.value }))}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    required
-                  >
-                    <option value="">Select a customer</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddCustomerModal(true)}
-                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 flex items-center gap-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
-                    </svg>
-                    Add New
-                  </button>
-                </div>
-              </div>
-
-              {newRental.items.map((item, index) => (
-                <div key={index} className="mb-4 p-4 border rounded-lg">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold">Bike {index + 1}</h3>
-                    {index > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => removeBikeFromRental(index)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2">
-                      Bike Type
-                    </label>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] md:rounded-lg md:p-6 overflow-y-auto">
+            <div className="p-4 md:p-6">
+              <h2 className="text-2xl font-bold mb-4">Agregar Nuevo Alquiler</h2>
+              <form onSubmit={handleAddRental}>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer">
+                    Cliente
+                  </label>
+                  <div className="flex gap-2">
                     <select
-                      value={item.bike_type_id}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleBikeTypeChange(index, e.target.value)}
+                      id="customer"
+                      value={newRental.customer_id}
+                      onChange={(e) => setNewRental(prev => ({ ...prev, customer_id: e.target.value }))}
                       className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                       required
                     >
-                      <option value="">Select a bike type</option>
-                      {bikeTypes.map((bikeType) => (
-                        <option key={bikeType.id} value={bikeType.id}>
-                          {bikeType.type_name}
+                      <option value="">Selecciona un cliente</option>
+                      {customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name}
                         </option>
                       ))}
                     </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomerModal(true)}
+                      className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 flex items-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
+                      </svg>
+                      Agregar Nuevo
+                    </button>
                   </div>
-                  {item.bike_type_id && (
-                    <>
-                      <div className="mb-4">
-                        <label className="block text-gray-700 text-sm font-bold mb-2">
-                          Duration
-                        </label>
-                        <select
-                          value={item.rental_pricing_id}
-                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDurationChange(index, e.target.value)}
-                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                          required
-                        >
-                          <option value="">Select duration</option>
-                          {rentalRates
-                            .filter(r => r.bike_type_id === parseInt(item.bike_type_id))
-                            .map((rate) => (
-                              <option key={rate.id} value={rate.id}>
-                                {rate.duration} {rate.duration_unit}{rate.duration > 1 ? 's' : ''} - ${rate.price.toFixed(2)}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                      <div className="mb-4">
-                        <label className="block text-gray-700 text-sm font-bold mb-2">
-                          Quantity
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const updatedItems = [...newRental.items];
-                            updatedItems[index] = {
-                              ...updatedItems[index],
-                              quantity: parseInt(e.target.value) || 1
-                            };
-                            setNewRental(prev => ({
-                              ...prev,
-                              items: updatedItems
-                            }));
-                          }}
-                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                          required
-                        />
-                      </div>
-                    </>
-                  )}
                 </div>
-              ))}
 
-              <div className="mb-4">
-                <button
-                  type="button"
-                  onClick={addNewBikeToRental}
-                  className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 flex items-center justify-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                  </svg>
-                  Add Another Bike
-                </button>
-              </div>
+                {newRental.items.map((item, index) => (
+                  <div key={index} className="mb-4 p-4 border rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="font-semibold">Bike {index + 1}</h3>
+                      {index > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => removeBikeFromRental(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-gray-700 text-sm font-bold mb-2">
+                        Bike Type
+                      </label>
+                      <select
+                        value={item.bike_type_id}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleBikeTypeChange(index, e.target.value)}
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        required
+                      >
+                        <option value="">Select a bike type</option>
+                        {bikeTypes.map((bikeType) => (
+                          <option key={bikeType.id} value={bikeType.id}>
+                            {bikeType.type_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {item.bike_type_id && (
+                      <>
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-bold mb-2">
+                            Duración
+                          </label>
+                          <select
+                            value={item.rental_pricing_id}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDurationChange(index, e.target.value)}
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            required
+                          >
+                            <option value="">Selecciona duración</option>
+                            {rentalRates
+                              .filter(r => r.bike_type_id === parseInt(item.bike_type_id))
+                              .map((rate) => (
+                                <option key={rate.id} value={rate.id}>
+                                  {rate.duration} {rate.duration_unit}{rate.duration > 1 ? 's' : ''} - {rate.price.toFixed(2)}€
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <div className="mb-4">
+                          <label className="block text-gray-700 text-sm font-bold mb-2">
+                            Cantidad
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const updatedItems = [...newRental.items];
+                              updatedItems[index] = {
+                                ...updatedItems[index],
+                                quantity: parseInt(e.target.value) || 1
+                              };
+                              setNewRental(prev => ({
+                                ...prev,
+                                items: updatedItems
+                              }));
+                            }}
+                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
 
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setNewRental({
-                      customer_id: '',
-                      status: 'active',
-                      items: []
-                    });
-                    setAvailableRates([]);
-                  }}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                  disabled={!newRental.customer_id || newRental.items.length === 0 || newRental.items.some(item => !item.rental_pricing_id)}
-                >
-                  Add Rental
-                </button>
-              </div>
-            </form>
+                <div className="mb-4">
+                  <button
+                    type="button"
+                    onClick={addNewBikeToRental}
+                    className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    Agregar Otra Bicicleta
+                  </button>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setNewRental({
+                        customer_id: '',
+                        status: 'active',
+                        items: []
+                      });
+                      setAvailableRates([]);
+                    }}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                    disabled={!newRental.customer_id || newRental.items.length === 0 || newRental.items.some(item => !item.rental_pricing_id)}
+                  >
+                    Agregar Alquiler
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {showAddCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Add New Customer</h2>
-            <form onSubmit={handleAddCustomer}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_name">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  id="customer_name"
-                  value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_email">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  id="customer_email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_phone">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  id="customer_phone"
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-md md:rounded-lg md:p-6">
+            <div className="p-4 md:p-6">
+              <h2 className="text-2xl font-bold mb-4">Agregar Nuevo Cliente</h2>
+              <form onSubmit={handleAddCustomer}>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_name">
+                    Nombre
+                  </label>
+                  <input
+                    type="text"
+                    id="customer_name"
+                    value={newCustomer.name}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_email">
+                    Correo Electrónico
+                  </label>
+                  <input
+                    type="email"
+                    id="customer_email"
+                    value={newCustomer.email}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_phone">
+                    Teléfono
+                  </label>
+                  <input
+                    type="tel"
+                    id="customer_phone"
+                    value={newCustomer.phone}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomerModal(false)}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Agregar Cliente
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rental Details Modal */}
+      {selectedRental && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] md:rounded-lg md:p-6 overflow-y-auto">
+            <div className="p-4 md:p-6">
+              <div className="flex justify-between items-start mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Detalles del Alquiler</h2>
                 <button
-                  type="button"
-                  onClick={() => setShowAddCustomerModal(false)}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  onClick={() => setSelectedRental(null)}
+                  className="text-gray-500 hover:text-gray-700"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                >
-                  Add Customer
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-            </form>
+              {/* Rental details content */}
+            </div>
           </div>
         </div>
       )}

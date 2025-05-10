@@ -13,9 +13,10 @@ export default function Navigation() {
   };
 
   const navItems = [
-    { href: '/customers', label: 'Customers' },
-    { href: '/rentals', label: 'Rentals' },
-    { href: '/repairs', label: 'Repairs' },
+    { href: '/customers', label: 'Clientes' },
+    { href: '/rentals', label: 'Alquileres' },
+    { href: '/repairs', label: 'Reparaciones' },
+    { href: '/settings', label: 'Configuración' },
   ];
 
   return (

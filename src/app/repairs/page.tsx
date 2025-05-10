@@ -14,7 +14,7 @@ interface Repair {
   delivery_date: string | null;
   price: number;
   notes: string;
-  status: 'pending' | 'in progress' | 'completed' | 'canceled';
+  status: 'pending' | 'in progress' | 'completed' | 'delivered' | 'canceled';
   created_at: string;
 }
 
@@ -23,7 +23,19 @@ interface Customer {
   name: string;
 }
 
-// Status-related functions
+// Add a function to translate status to Spanish for UI
+const translateStatus = (status: string) => {
+  switch (status) {
+    case 'pending': return 'Pendiente';
+    case 'in progress': return 'En progreso';
+    case 'completed': return 'Completado';
+    case 'delivered': return 'Entregado';
+    case 'canceled': return 'Cancelado';
+    default: return status;
+  }
+};
+
+// Update getStatusColor to use English status values
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'pending':
@@ -32,6 +44,8 @@ const getStatusColor = (status: string) => {
       return 'bg-blue-100 text-blue-800';
     case 'completed':
       return 'bg-green-100 text-green-800';
+    case 'delivered':
+      return 'bg-purple-100 text-purple-800';
     case 'canceled':
       return 'bg-red-100 text-red-800';
     default:
@@ -39,23 +53,29 @@ const getStatusColor = (status: string) => {
   }
 };
 
+// Update getNextStatus to use English status values
 const getNextStatus = (currentStatus: string): string => {
   switch (currentStatus) {
     case 'pending':
       return 'in progress';
     case 'in progress':
       return 'completed';
+    case 'completed':
+      return 'delivered';
     default:
       return currentStatus;
   }
 };
 
+// Update getStatusButtonText to use English status values
 const getStatusButtonText = (status: string): string => {
   switch (status) {
     case 'pending':
-      return 'Start';
+      return 'Iniciar';
     case 'in progress':
-      return 'Complete';
+      return 'Completar';
+    case 'completed':
+      return 'Entregar';
     default:
       return '';
   }
@@ -65,6 +85,7 @@ export default function RepairsPage() {
   const [repairs, setRepairs] = useState<Repair[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
@@ -82,6 +103,7 @@ export default function RepairsPage() {
     notes: '',
     status: 'pending' as const,
   });
+  const [selectedRepair, setSelectedRepair] = useState<Repair | null>(null);
   const supabase = createClientComponentClient();
 
   useEffect(() => {
@@ -91,17 +113,19 @@ export default function RepairsPage() {
 
   const fetchRepairs = async () => {
     try {
+      setError(null);
       const { data, error } = await supabase
         .from('repairs')
         .select('*')
-        .not('status', 'eq', 'completed')
-        .not('status', 'eq', 'canceled');
-        //.order('created_at', { ascending: false });
+        .not('status', 'eq', 'delivered')
+        .not('status', 'eq', 'canceled')
+        .order('delivery_date', { ascending: true });
 
       if (error) throw error;
       setRepairs(data || []);
     } catch (error) {
       console.error('Error fetching repairs:', error);
+      setError('Error al cargar las reparaciones. Por favor, intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -109,6 +133,7 @@ export default function RepairsPage() {
 
   const fetchCustomers = async () => {
     try {
+      setError(null);
       const { data, error } = await supabase
         .from('customers')
         .select('id, name');
@@ -117,23 +142,25 @@ export default function RepairsPage() {
       setCustomers(data || []);
     } catch (error) {
       console.error('Error fetching customers:', error);
+      setError('Error al cargar los clientes. Por favor, intenta de nuevo.');
     }
   };
 
   const handleAddRepair = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setError(null);
       const { error } = await supabase
         .from('repairs')
         .insert([{
           customer_id: parseInt(newRepair.customer_id),
           bike_model: newRepair.bike_model,
-          repair_start: convertToUTC(new Date(newRepair.repair_start)).toISOString(),
+          repair_start: null,
           repair_end: newRepair.repair_end || null,
           delivery_date: newRepair.delivery_date ? convertToUTC(new Date(newRepair.delivery_date)).toISOString() : null,
           price: parseFloat(newRepair.price) || 0,
           notes: newRepair.notes,
-          status: newRepair.status,
+          status: 'pending',
         }]);
 
       if (error) throw error;
@@ -151,12 +178,14 @@ export default function RepairsPage() {
       fetchRepairs();
     } catch (error) {
       console.error('Error adding repair:', error);
+      setError('Error al agregar la reparación. Por favor, intenta de nuevo.');
     }
   };
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setError(null);
       const { data, error } = await supabase
         .from('customers')
         .insert([newCustomer])
@@ -171,6 +200,7 @@ export default function RepairsPage() {
       setNewCustomer({ name: '', email: '', phone: '' });
     } catch (error) {
       console.error('Error adding customer:', error);
+      setError('Error al agregar el cliente. Por favor, intenta de nuevo.');
     }
   };
 
@@ -179,9 +209,12 @@ export default function RepairsPage() {
     if (nextStatus === currentStatus) return;
 
     try {
+      setError(null);
       const updateData: any = { status: nextStatus };
       
-      if (nextStatus === 'completed') {
+      if (nextStatus === 'in progress') {
+        updateData.repair_start = convertToUTC(new Date()).toISOString();
+      } else if (nextStatus === 'completed') {
         updateData.repair_end = convertToUTC(new Date()).toISOString();
       }
 
@@ -194,11 +227,13 @@ export default function RepairsPage() {
       fetchRepairs();
     } catch (error) {
       console.error('Error updating repair status:', error);
+      setError('Error al actualizar el estado de la reparación. Por favor, intenta de nuevo.');
     }
   };
 
   const handleCancelRepair = async (repairId: number) => {
     try {
+      setError(null);
       const { error } = await supabase
         .from('repairs')
         .update({ 
@@ -211,14 +246,15 @@ export default function RepairsPage() {
       fetchRepairs();
     } catch (error) {
       console.error('Error canceling repair:', error);
+      setError('Error al cancelar la reparación. Por favor, intenta de nuevo.');
     }
   };
 
   const handleShowAddModal = () => {
     const now = new Date();
     const deliveryDate = new Date(now.getTime() + 60 * 60 * 1000); // Add 1 hour
-    const formattedDate = now.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
-    const formattedDeliveryDate = deliveryDate.toISOString().slice(0, 16);
+    const formattedDate = convertToUTC(now).toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+    const formattedDeliveryDate = convertToUTC(deliveryDate).toISOString().slice(0, 16);
     setNewRepair(prev => ({
       ...prev,
       repair_start: formattedDate,
@@ -229,19 +265,35 @@ export default function RepairsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold text-gray-900">Bike Reparations</h1>
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded relative" role="alert">
+          <span className="block sm:inline">{error}</span>
+          <button
+            className="absolute top-0 bottom-0 right-0 px-4 py-3"
+            onClick={() => setError(null)}
+          >
+            <svg className="fill-current h-6 w-6 text-red-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+              <title>Close</title>
+              <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/>
+            </svg>
+          </button>
         </div>
-        <div className="flex gap-4 items-center">
+      )}
+      
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-gray-900">Reparaciones</h1>
+        </div>
+        <div className="flex items-center gap-6">
           <Link
             href="/repairs/history"
             className="text-blue-600 hover:text-blue-800 flex items-center gap-2"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+              <path d="M3.375 3C2.339 3 1.5 3.84 1.5 4.875v.75c0 1.036.84 1.875 1.875 1.875h17.25c1.035 0 1.875-.84 1.875-1.875v-.75C22.5 3.839 21.66 3 20.625 3H3.375Z" />
+              <path fillRule="evenodd" d="m3.087 9 .54 9.176A3 3 0 0 0 6.62 21h10.757a3 3 0 0 0 2.995-2.824L20.913 9H3.087Zm6.163 3.75A.75.75 0 0 1 10 12h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
             </svg>
-            View History
+            <span className="hidden md:inline">Ver Historial</span>
           </Link>
           <button
             onClick={handleShowAddModal}
@@ -250,7 +302,7 @@ export default function RepairsPage() {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
             </svg>
-            Add Reparation
+            <span className="hidden md:inline">Agregar Reparación</span>
           </button>
         </div>
       </div>
@@ -266,23 +318,14 @@ export default function RepairsPage() {
               <div className="flex justify-between items-start mb-3">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                    </svg>
                     {customers.find(c => c.id === repair.customer_id)?.name}
                   </h3>
                   <p className="text-sm text-gray-600 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-gray-400 mr-2 align-middle">
-                      <path d="M5 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path>
-                      <path d="M19 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"></path>
-                      <path d="M12 19l0 -4l-3 -3l5 -4l2 3l3 0"></path>
-                      <path d="M17 5m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"></path>
-                    </svg>
                     {repair.bike_model}
                   </p>
                 </div>
                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(repair.status)}`}>
-                  {repair.status}
+                  {translateStatus(repair.status)}
                 </span>
               </div>
               
@@ -292,10 +335,10 @@ export default function RepairsPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
-                    Start:
+                    Inicio:
                   </span>
                   <span className="font-medium">
-                    {formatDateTime(repair.repair_start)}
+                    {repair.repair_start ? formatDateTime(repair.repair_start) : '-'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -303,7 +346,7 @@ export default function RepairsPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
-                    Delivery:
+                    Entrega Estimada:
                   </span>
                   <span className="font-medium">
                     {repair.delivery_date ? formatDateTime(repair.delivery_date) : 'Not set'}
@@ -315,10 +358,10 @@ export default function RepairsPage() {
                       <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
                     </svg>
-                    Price:
+                    Precio:
                   </span>
                   <span className="font-medium">
-                    ${repair.price.toFixed(2)}
+                    {repair.price.toFixed(2)}€
                   </span>
                 </div>
                 {repair.notes && (
@@ -327,7 +370,7 @@ export default function RepairsPage() {
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 mr-2 align-middle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V19M19.5 19.5A2.5 2.5 0 0017 17H7a2.5 2.5 0 00-2.5 2.5M19.5 19.5V7A2.5 2.5 0 0017 4.5H7A2.5 2.5 0 004.5 7v12.5M19.5 19.5a2.5 2.5 0 01-2.5-2.5M4.5 19.5A2.5 2.5 0 007 17" />
                       </svg>
-                      Notes:
+                      Notas:
                     </span>
                     <p className="text-sm text-gray-700 mt-1">{repair.notes}</p>
                   </div>
@@ -356,7 +399,7 @@ export default function RepairsPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
-                    Cancel
+                    Cancelar
                   </button>
                 </div>
               </div>
@@ -366,198 +409,256 @@ export default function RepairsPage() {
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Add New Reparation</h2>
-            <form onSubmit={handleAddRepair}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer">
-                  Customer
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    id="customer"
-                    value={newRepair.customer_id}
-                    onChange={(e) => setNewRepair({ ...newRepair, customer_id: e.target.value })}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-md md:rounded-lg md:p-6">
+            <div className="p-4 md:p-6">
+              <h2 className="text-2xl font-bold mb-4">Agregar Nueva Reparación</h2>
+              <form onSubmit={handleAddRepair}>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer">
+                    Cliente
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      id="customer"
+                      value={newRepair.customer_id}
+                      onChange={(e) => setNewRepair({ ...newRepair, customer_id: e.target.value })}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      required
+                    >
+                      <option value="">Selecciona un cliente</option>
+                      {customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomerModal(true)}
+                      className="bg-gray-200 text-gray-700 px-3 py-2 rounded hover:bg-gray-300"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="bike_model">
+                    Modelo de Bicicleta
+                  </label>
+                  <input
+                    type="text"
+                    id="bike_model"
+                    value={newRepair.bike_model}
+                    onChange={(e) => setNewRepair({ ...newRepair, bike_model: e.target.value })}
                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     required
-                  >
-                    <option value="">Select a customer</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="delivery_date">
+                    Fecha de Entrega Estimada
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="delivery_date"
+                    value={newRepair.delivery_date}
+                    onChange={(e) => setNewRepair({ ...newRepair, delivery_date: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="price">
+                    Precio
+                  </label>
+                  <input
+                    type="number"
+                    id="price"
+                    value={newRepair.price}
+                    onChange={(e) => setNewRepair({ ...newRepair, price: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="notes">
+                    Notas
+                  </label>
+                  <textarea
+                    id="notes"
+                    value={newRepair.notes}
+                    onChange={(e) => setNewRepair({ ...newRepair, notes: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddCustomerModal(true)}
-                    className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition-colors"
-                    title="Add Customer"
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setNewRepair({
+                        customer_id: '',
+                        bike_model: '',
+                        repair_start: '',
+                        repair_end: '',
+                        delivery_date: '',
+                        price: '',
+                        notes: '',
+                        status: 'pending',
+                      });
+                    }}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                    </svg>
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Agregar Reparación
                   </button>
                 </div>
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="bike_model">
-                  Bike Model
-                </label>
-                <input
-                  type="text"
-                  id="bike_model"
-                  value={newRepair.bike_model}
-                  onChange={(e) => setNewRepair({ ...newRepair, bike_model: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="repair_start">
-                  Start Date
-                </label>
-                <input
-                  type="datetime-local"
-                  id="repair_start"
-                  value={newRepair.repair_start}
-                  onChange={(e) => setNewRepair({ ...newRepair, repair_start: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="delivery_date">
-                  Expected Delivery Date
-                </label>
-                <input
-                  type="datetime-local"
-                  id="delivery_date"
-                  value={newRepair.delivery_date}
-                  onChange={(e) => setNewRepair({ ...newRepair, delivery_date: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="price">
-                  Price
-                </label>
-                <input
-                  type="number"
-                  id="price"
-                  value={newRepair.price}
-                  onChange={(e) => setNewRepair({ ...newRepair, price: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  step="0.01"
-                  min="0"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="notes">
-                  Notes
-                </label>
-                <textarea
-                  id="notes"
-                  value={newRepair.notes}
-                  onChange={(e) => setNewRepair({ ...newRepair, notes: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setNewRepair({
-                      customer_id: '',
-                      bike_model: '',
-                      repair_start: '',
-                      repair_end: '',
-                      delivery_date: '',
-                      price: '',
-                      notes: '',
-                      status: 'pending',
-                    });
-                  }}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                >
-                  Add Reparation
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}
 
       {showAddCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-4">Add New Customer</h2>
-            <form onSubmit={handleAddCustomer}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_name">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  id="customer_name"
-                  value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_email">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  id="customer_email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_phone">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  id="customer_phone"
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-md md:rounded-lg md:p-6">
+            <div className="p-4 md:p-6">
+              <h2 className="text-2xl font-bold mb-4">Agregar Nuevo Cliente</h2>
+              <form onSubmit={handleAddCustomer}>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_name">
+                    Nombre
+                  </label>
+                  <input
+                    type="text"
+                    id="customer_name"
+                    value={newCustomer.name}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_email">
+                    Correo Electrónico
+                  </label>
+                  <input
+                    type="email"
+                    id="customer_email"
+                    value={newCustomer.email}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer_phone">
+                    Teléfono
+                  </label>
+                  <input
+                    type="tel"
+                    id="customer_phone"
+                    value={newCustomer.phone}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomerModal(false)}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Agregar Cliente
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Repair Details Modal */}
+      {selectedRepair && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] md:rounded-lg md:p-6 overflow-y-auto">
+            <div className="p-4 md:p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-2xl font-bold">Detalles de la Reparación</h2>
                 <button
-                  type="button"
-                  onClick={() => setShowAddCustomerModal(false)}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  onClick={() => setSelectedRepair(null)}
+                  className="text-gray-500 hover:text-gray-700"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                >
-                  Add Customer
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-            </form>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                    </svg>
+                    Inicio:
+                  </span>
+                  <span className="font-medium">
+                    {formatDateTime(selectedRepair.repair_start)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+                    </svg>
+                    Entrega Estimada:
+                  </span>
+                  <span className="font-medium">
+                    {selectedRepair.delivery_date ? formatDateTime(selectedRepair.delivery_date) : 'Not set'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
+                    </svg>
+                    Precio:
+                  </span>
+                  <span className="font-medium">
+                    {selectedRepair.price.toFixed(2)}€
+                  </span>
+                </div>
+                {selectedRepair.notes && (
+                  <div className="mt-2 pt-2 border-t border-gray-200">
+                    <span className="text-gray-600 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400 mr-2 align-middle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V19M19.5 19.5A2.5 2.5 0 0017 17H7a2.5 2.5 0 00-2.5 2.5M19.5 19.5V7A2.5 2.5 0 0017 4.5H7A2.5 2.5 0 004.5 7v12.5M19.5 19.5a2.5 2.5 0 01-2.5-2.5M4.5 19.5A2.5 2.5 0 007 17" />
+                      </svg>
+                      Notas:
+                    </span>
+                    <p className="text-sm text-gray-700 mt-1">{selectedRepair.notes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

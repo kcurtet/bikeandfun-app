@@ -37,11 +37,11 @@ interface BikeType {
 // Status-related functions
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'active':
+    case 'activo':
       return 'bg-blue-100 text-blue-800';
-    case 'completed':
+    case 'completado':
       return 'bg-green-100 text-green-800';
-    case 'canceled':
+    case 'cancelado':
       return 'bg-red-100 text-red-800';
     default:
       return 'bg-gray-100 text-gray-800';
@@ -158,16 +158,16 @@ export default function RentalHistoryPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold text-gray-900">Rental History</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Historial de Alquileres</h1>
         </div>
         <Link
           href="/rentals"
           className="text-blue-600 hover:text-blue-800 flex items-center gap-2"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
           </svg>
-          Back to Active Rentals
+          Volver a Alquileres Activos
         </Link>
       </div>
 
@@ -197,26 +197,31 @@ export default function RentalHistoryPage() {
                   {customers.find(c => c.id === rental.customer_id)?.name}
                 </h3>
                 <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(rental.status)}`}>
-                  {rental.status}
+                  {rental.status.charAt(0).toUpperCase() + rental.status.slice(1)}
                 </span>
               </div>
 
               <div className="space-y-2 mb-4 flex-1">
                 {rental.rental_items?.map((item) => (
-                  <div key={item.id} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="font-medium text-gray-900">
-                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                        </span>
-                        <span className="text-gray-500 ml-2">
-                          ({item.quantity} × {item.rental_pricing?.duration} {item.rental_pricing?.duration_unit})
-                        </span>
-                      </div>
+                  <div key={item.id} className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
                       <span className="font-medium text-gray-900">
-                        ${(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}
+                        {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
                       </span>
+                      <div className="text-gray-500 text-sm">
+                        {item.quantity} × {item.rental_pricing?.duration} {(() => {
+                          const unit = item.rental_pricing?.duration_unit;
+                          const n = item.rental_pricing?.duration;
+                          if (unit === 'hour') return n === 1 ? 'hora' : 'horas';
+                          if (unit === 'day') return n === 1 ? 'día' : 'días';
+                          if (unit === 'week') return n === 1 ? 'semana' : 'semanas';
+                          return unit;
+                        })()}
+                      </div>
                     </div>
+                    <span className="font-medium text-gray-900">
+                      {(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}€
+                    </span>
                   </div>
                 ))}
               </div>
@@ -227,7 +232,7 @@ export default function RentalHistoryPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
-                    Start Date:
+                    Fecha de Inicio:
                   </span>
                   <span className="font-medium text-gray-900">
                     {formatDateTime(rental.start_date)}
@@ -238,7 +243,7 @@ export default function RentalHistoryPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
                     </svg>
-                    End Date:
+                    Fecha de Fin:
                   </span>
                   <span className="font-medium text-gray-900">
                     {rental.rental_items && rental.rental_items.length > 0 && rental.rental_items[0].rental_pricing ? 
@@ -255,12 +260,12 @@ export default function RentalHistoryPage() {
                       <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z" />
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clipRule="evenodd" />
                     </svg>
-                    Total Amount:
+                    Total:
                   </span>
                   <span className="text-xl font-bold text-gray-900">
-                    ${rental.rental_items?.reduce((total, item) => 
+                    {rental.rental_items?.reduce((total, item) => 
                       total + ((item.rental_pricing?.price || 0) * item.quantity), 0
-                    ).toFixed(2)}
+                    ).toFixed(2)}€
                   </span>
                 </div>
               </div>
@@ -274,7 +279,7 @@ export default function RentalHistoryPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Rental Details</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Detalles del Alquiler</h2>
               <button
                 onClick={() => setSelectedRental(null)}
                 className="text-gray-500 hover:text-gray-700"
@@ -292,7 +297,7 @@ export default function RentalHistoryPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                     </svg>
-                    <h3 className="text-lg font-semibold text-gray-900">Customer Information</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Información del Cliente</h3>
                   </div>
                   <p className="text-gray-600">
                     {customers.find(c => c.id === selectedRental.customer_id)?.name}
@@ -304,10 +309,10 @@ export default function RentalHistoryPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
-                    <h3 className="text-lg font-semibold text-gray-900">Status</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Estado</h3>
                   </div>
                   <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedRental.status)}`}>
-                    {selectedRental.status}
+                    {selectedRental.status.charAt(0).toUpperCase() + selectedRental.status.slice(1)}
                   </span>
                 </div>
               </div>
@@ -318,29 +323,29 @@ export default function RentalHistoryPage() {
                     <path d="M8 5a1 1 0 011 1v1h1a1 1 0 110 2H9v1a1 1 0 11-2 0V9H6a1 1 0 110-2h1V6a1 1 0 011-1z" />
                     <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm11 1H6v8l4-2 4 2V6z" clipRule="evenodd" />
                   </svg>
-                  <h3 className="text-lg font-semibold text-gray-900">Bikes</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Bicicletas</h3>
                 </div>
                 <div className="space-y-3">
                   {selectedRental.rental_items?.map((item) => (
-                    <div key={item.id} className="bg-white p-3 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clipRule="evenodd" />
-                          </svg>
-                          <div>
-                            <span className="font-medium text-gray-900">
-                              {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
-                            </span>
-                            <span className="text-gray-500 ml-2">
-                              ({item.quantity} × {item.rental_pricing?.duration} {item.rental_pricing?.duration_unit})
-                            </span>
-                          </div>
-                        </div>
+                    <div key={item.id} className="bg-white p-3 rounded-lg flex justify-between items-center">
+                      <div>
                         <span className="font-medium text-gray-900">
-                          ${(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}
+                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
                         </span>
+                        <div className="text-gray-500 text-sm">
+                          {item.quantity} × {item.rental_pricing?.duration} {(() => {
+                            const unit = item.rental_pricing?.duration_unit;
+                            const n = item.rental_pricing?.duration;
+                            if (unit === 'hour') return n === 1 ? 'hora' : 'horas';
+                            if (unit === 'day') return n === 1 ? 'día' : 'días';
+                            if (unit === 'week') return n === 1 ? 'semana' : 'semanas';
+                            return unit;
+                          })()}
+                        </div>
                       </div>
+                      <span className="font-medium text-gray-900">
+                        {(item.rental_pricing?.price ? (item.rental_pricing.price * item.quantity) : 0).toFixed(2)}€
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -352,7 +357,7 @@ export default function RentalHistoryPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                     </svg>
-                    <h3 className="text-lg font-semibold text-gray-900">Start Time</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Hora de Inicio</h3>
                   </div>
                   <p className="text-gray-600">{formatDateTime(selectedRental.start_date)}</p>
                 </div>
@@ -362,13 +367,11 @@ export default function RentalHistoryPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
                     </svg>
-                    <h3 className="text-lg font-semibold text-gray-900">Total Amount</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Total</h3>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">
-                    ${selectedRental.rental_items?.reduce((total, item) => 
-                      total + ((item.rental_pricing?.price || 0) * item.quantity), 0
-                    ).toFixed(2)}
-                  </p>
+                  <p className="mt-1">{selectedRental.rental_items?.reduce((total, item) => 
+                    total + ((item.rental_pricing?.price || 0) * item.quantity), 0
+                  ).toFixed(2)}€</p>
                 </div>
               </div>
             </div>
