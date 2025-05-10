@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { convertToUTC, convertToLocal, formatDateTime } from '@/utils/dateUtils';
 
 interface Rental {
   id: number;
@@ -41,6 +42,53 @@ interface RentalRate {
   created_at: string;
   updated_at: string;
 }
+
+// Status-related functions
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'active':
+      return 'bg-green-100 text-green-800';
+    case 'completed':
+      return 'bg-blue-100 text-blue-800';
+    case 'canceled':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+};
+
+const getNextStatus = (currentStatus: string): string => {
+  switch (currentStatus) {
+    case 'active':
+      return 'completed';
+    case 'completed':
+      return 'canceled';
+    default:
+      return currentStatus;
+  }
+};
+
+const getStatusButtonText = (status: string): string => {
+  switch (status) {
+    case 'active':
+      return 'Complete Rental';
+    case 'completed':
+      return 'Cancel Rental';
+    default:
+      return '';
+  }
+};
+
+const getStatusButtonColor = (status: string): string => {
+  switch (status) {
+    case 'active':
+      return 'bg-green-600 hover:bg-green-700';
+    case 'completed':
+      return 'bg-red-600 hover:bg-red-700';
+    default:
+      return 'bg-gray-600 hover:bg-gray-700';
+  }
+};
 
 export default function RentalsPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
@@ -130,7 +178,6 @@ export default function RentalsPage() {
         .eq('is_active', true);
 
       if (error) throw error;
-      console.log('Fetched rental pricing:', data);
       setRentalRates(data || []);
     } catch (error) {
       console.error('Error fetching rental pricing:', error);
@@ -151,18 +198,13 @@ export default function RentalsPage() {
 
   const handleBikeTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const bikeTypeId = e.target.value;
-    console.log('Selected bike type ID:', bikeTypeId);
-    console.log('All rental pricing:', rentalRates);
-    
     setNewRental(prev => ({
       ...prev,
       bike_type_id: bikeTypeId,
       rental_pricing_id: '',
     }));
 
-    // Filter rates for the selected bike type
     const rates = rentalRates.filter(r => r.bike_type_id === parseInt(bikeTypeId));
-    console.log('Filtered rates for bike type:', rates);
     setAvailableRates(rates);
   };
 
@@ -188,6 +230,7 @@ export default function RentalsPage() {
           bike_type_id: parseInt(newRental.bike_type_id),
           rental_pricing_id: parseInt(newRental.rental_pricing_id),
           status: newRental.status,
+          start_date: convertToUTC(new Date()).toISOString(),
         }]);
 
       if (error) throw error;
@@ -225,30 +268,6 @@ export default function RentalsPage() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'completed':
-        return 'bg-blue-100 text-blue-800';
-      case 'canceled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getNextStatus = (currentStatus: string): string => {
-    switch (currentStatus) {
-      case 'active':
-        return 'completed';
-      case 'completed':
-        return 'canceled';
-      default:
-        return currentStatus;
-    }
-  };
-
   const handleStatusUpdate = async (rentalId: number, currentStatus: string) => {
     const nextStatus = getNextStatus(currentStatus);
     if (nextStatus === currentStatus) return;
@@ -260,7 +279,7 @@ export default function RentalsPage() {
         .eq('id', rentalId);
 
       if (error) throw error;
-      fetchRentals(); // Refresh the rentals list
+      fetchRentals();
     } catch (error) {
       console.error('Error updating rental status:', error);
     }
@@ -274,75 +293,35 @@ export default function RentalsPage() {
         .eq('id', rentalId);
 
       if (error) throw error;
-      fetchRentals(); // Refresh the rentals list
+      fetchRentals();
     } catch (error) {
       console.error('Error canceling rental:', error);
     }
   };
 
-  const getStatusButtonText = (status: string): string => {
-    switch (status) {
-      case 'active':
-        return 'Complete Rental';
-      case 'completed':
-        return 'Cancel Rental';
-      default:
-        return '';
-    }
-  };
-
-  const getStatusButtonColor = (status: string): string => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-600 hover:bg-green-700';
-      case 'completed':
-        return 'bg-red-600 hover:bg-red-700';
-      default:
-        return 'bg-gray-600 hover:bg-gray-700';
-    }
-  };
-
-  const formatDateTime = (dateString: string): string => {
+  const calculateEndDate = (startDate: string, duration: number, durationUnit: string): string => {
     try {
-      const date = new Date(dateString);
+      const date = new Date(startDate);
       if (isNaN(date.getTime())) {
         return '-';
       }
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return '-';
-    }
-  };
 
-  const calculateEndDate = (startDate: string, duration: number, durationUnit: string): string => {
-    try {
-      const start = new Date(startDate);
-      if (isNaN(start.getTime())) {
-        return '-';
-      }
-      
-      let end = new Date(start);
-
+      let endDate = new Date(date);
       switch (durationUnit) {
         case 'hour':
-          end.setHours(end.getHours() + duration);
+          endDate.setHours(endDate.getHours() + duration);
           break;
         case 'day':
-          end.setDate(end.getDate() + duration);
+          endDate.setDate(endDate.getDate() + duration);
           break;
         case 'week':
-          end.setDate(end.getDate() + (duration * 7));
+          endDate.setDate(endDate.getDate() + (duration * 7));
           break;
+        default:
+          return '-';
       }
 
-      return formatDateTime(end.toString());
+      return formatDateTime(endDate.toISOString());
     } catch (error) {
       console.error('Error calculating end date:', error);
       return '-';
@@ -351,7 +330,7 @@ export default function RentalsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Bike Rentals</h1>
         <div className="flex gap-4 items-center">
           <Link
@@ -428,7 +407,7 @@ export default function RentalsPage() {
                     onClick={() => handleStatusUpdate(rental.id, rental.status)}
                     className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
                   >
-                    Complete Rental
+                    Complete
                   </button>
                   <button
                     onClick={() => handleCancelRental(rental.id)}
@@ -444,7 +423,7 @@ export default function RentalsPage() {
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-2xl font-bold mb-4">Add New Rental</h2>
             <form onSubmit={handleAddRental}>
@@ -470,9 +449,12 @@ export default function RentalsPage() {
                   <button
                     type="button"
                     onClick={() => setShowAddCustomerModal(true)}
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors whitespace-nowrap"
+                    className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition-colors"
+                    title="Add Customer"
                   >
-                    Add Customer
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -550,7 +532,7 @@ export default function RentalsPage() {
       )}
 
       {showAddCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-2xl font-bold mb-4">Add New Customer</h2>
             <form onSubmit={handleAddCustomer}>
@@ -603,7 +585,7 @@ export default function RentalsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                 >
                   Add Customer
                 </button>

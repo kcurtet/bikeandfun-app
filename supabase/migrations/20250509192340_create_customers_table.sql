@@ -28,3 +28,40 @@ USING (auth.uid() IS NOT NULL);  -- Allow only logged-in users to update custome
 CREATE POLICY delete_customers ON public.customers
 FOR DELETE
 USING (auth.uid() IS NOT NULL);  -- Allow only logged-in users to delete customers
+
+-- Create the Anonymous customer
+INSERT INTO public.customers (name, email, phone) VALUES ('Anonymous', NULL, NULL);
+
+-- Create a function to check if the customer being deleted is Anonymous
+CREATE OR REPLACE FUNCTION prevent_anonymous_deletion()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.name = 'Anonymous' THEN
+        RAISE EXCEPTION 'Cannot delete the Anonymous customer';
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger that runs before delete on the customers table
+CREATE TRIGGER prevent_anonymous_deletion_trigger
+    BEFORE DELETE ON public.customers
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_anonymous_deletion();
+
+-- Also prevent updating the Anonymous customer's name
+CREATE OR REPLACE FUNCTION prevent_anonymous_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.name = 'Anonymous' AND NEW.name != 'Anonymous' THEN
+        RAISE EXCEPTION 'Cannot modify the Anonymous customer name';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger that runs before update on the customers table
+CREATE TRIGGER prevent_anonymous_update_trigger
+    BEFORE UPDATE ON public.customers
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_anonymous_update();

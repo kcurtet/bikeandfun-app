@@ -43,9 +43,9 @@ INSERT INTO public.rentals (customer_id, bike_type_id, rental_pricing_id, status
 (5, 5, 10, 'canceled', '2024-05-05 14:00:00');  -- Charlie Wilson's Kids Bike rental was canceled
 
 -- Insert sample repairs
-INSERT INTO public.repairs (customer_id, bike_model, repair_start, repair_end, price, notes, status) VALUES
-(1, 'Trek Mountain Bike', '2024-05-01 09:00:00', '2024-05-02 17:00:00', 75.00, 'Regular maintenance and brake adjustment', 'completed'),
-(2, 'Specialized Road Bike', '2024-05-03 10:00:00', '2024-05-04 16:00:00', 120.00, 'Chain replacement and gear tuning', 'completed'),
-(3, 'Giant Electric Bike', '2024-05-05 11:00:00', '2024-05-06 15:00:00', 200.00, 'Battery replacement and motor check', 'in progress'),
-(4, 'Cannondale City Bike', '2024-05-07 13:00:00', '2024-05-08 14:00:00', 50.00, 'Tire replacement', 'pending'),
-(5, 'Schwinn Kids Bike', '2024-05-09 14:00:00', '2024-05-10 16:00:00', 30.00, 'Training wheels installation', 'pending');
+INSERT INTO public.repairs (customer_id, bike_model, repair_start, repair_end, delivery_date, price, notes, status) VALUES
+(1, 'Trek Mountain Bike', '2024-05-01 09:00:00', '2024-05-02 17:00:00', '2024-05-03 10:00:00', 75.00, 'Regular maintenance and brake adjustment', 'completed'),
+(2, 'Specialized Road Bike', '2024-05-03 10:00:00', '2024-05-04 16:00:00', '2024-05-05 14:00:00', 120.00, 'Chain replacement and gear tuning', 'completed'),
+(3, 'Giant Electric Bike', '2024-05-05 11:00:00', NULL, '2024-05-07 16:00:00', 200.00, 'Battery replacement and motor check', 'in progress'),
+(4, 'Cannondale City Bike', '2024-05-07 13:00:00', NULL, '2024-05-09 12:00:00', 50.00, 'Tire replacement', 'pending'),
+(5, 'Schwinn Kids Bike', '2024-05-09 14:00:00', NULL, '2024-05-11 15:00:00', 30.00, 'Training wheels installation', 'pending');

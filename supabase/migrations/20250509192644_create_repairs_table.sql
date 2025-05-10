@@ -3,7 +3,8 @@ CREATE TABLE public.repairs (
     customer_id bigint references public.customers(id) on delete cascade,
     bike_model text not null,  -- Store the bike model for repairs
     repair_start timestamp with time zone not null,
-    repair_end timestamp with time zone not null,
+    repair_end timestamp with time zone,
+    delivery_date timestamp with time zone,
     price numeric(10, 2) not null,
     notes text,
     status text not null CHECK (status IN ('pending', 'in progress', 'completed', 'canceled')),
