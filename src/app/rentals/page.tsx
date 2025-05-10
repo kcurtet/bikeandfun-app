@@ -9,16 +9,19 @@ import { convertToUTC, convertToLocal, formatDateTime } from '@/utils/dateUtils'
 interface Rental {
   id: number;
   customer_id: number;
-  bike_type_id: number;
-  rental_pricing_id: number;
   status: 'active' | 'completed' | 'canceled';
   start_date: string;
   created_at: string;
-  rental_pricing?: {
-    duration: number;
-    duration_unit: string;
-    price: number;
-  };
+  rental_items?: {
+    id: number;
+    bike_type_id: number;
+    rental_pricing_id: number;
+    rental_pricing?: {
+      duration: number;
+      duration_unit: string;
+      price: number;
+    };
+  }[];
 }
 
 interface Customer {
@@ -105,9 +108,11 @@ export default function RentalsPage() {
   });
   const [newRental, setNewRental] = useState({
     customer_id: '',
-    bike_type_id: '',
-    rental_pricing_id: '',
     status: 'active' as const,
+    items: [] as {
+      bike_type_id: string;
+      rental_pricing_id: string;
+    }[]
   });
   const [availableRates, setAvailableRates] = useState<RentalRate[]>([]);
   const supabase = createClientComponentClient();
@@ -126,10 +131,15 @@ export default function RentalsPage() {
         .from('rentals')
         .select(`
           *,
-          rental_pricing:rental_pricing_id (
-            duration,
-            duration_unit,
-            price
+          rental_items (
+            id,
+            bike_type_id,
+            rental_pricing_id,
+            rental_pricing:rental_pricing_id (
+              duration,
+              duration_unit,
+              price
+            )
           )
         `)
         .eq('status', 'active')
@@ -196,50 +206,84 @@ export default function RentalsPage() {
     return pricing ? pricing.price.toString() : '';
   };
 
-  const handleBikeTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const bikeTypeId = e.target.value;
-    setNewRental(prev => ({
-      ...prev,
+  const handleBikeTypeChange = (index: number, bikeTypeId: string) => {
+    const updatedItems = [...newRental.items];
+    updatedItems[index] = {
+      ...updatedItems[index],
       bike_type_id: bikeTypeId,
       rental_pricing_id: '',
+    };
+    setNewRental(prev => ({
+      ...prev,
+      items: updatedItems
     }));
 
     const rates = rentalRates.filter(r => r.bike_type_id === parseInt(bikeTypeId));
     setAvailableRates(rates);
   };
 
-  const handleDurationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const rateId = e.target.value;
-    const rate = availableRates.find(r => r.id === parseInt(rateId));
+  const handleDurationChange = (index: number, rateId: string) => {
+    const updatedItems = [...newRental.items];
+    updatedItems[index] = {
+      ...updatedItems[index],
+      rental_pricing_id: rateId,
+    };
+    setNewRental(prev => ({
+      ...prev,
+      items: updatedItems
+    }));
+  };
 
-    if (rate) {
-      setNewRental(prev => ({
-        ...prev,
-        rental_pricing_id: rate.id.toString(),
-      }));
-    }
+  const addNewBikeToRental = () => {
+    setNewRental(prev => ({
+      ...prev,
+      items: [...prev.items, { bike_type_id: '', rental_pricing_id: '' }]
+    }));
+  };
+
+  const removeBikeFromRental = (index: number) => {
+    const updatedItems = [...newRental.items];
+    updatedItems.splice(index, 1);
+    setNewRental(prev => ({
+      ...prev,
+      items: updatedItems
+    }));
   };
 
   const handleAddRental = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { error } = await supabase
+      // First create the rental
+      const { data: rentalData, error: rentalError } = await supabase
         .from('rentals')
         .insert([{
           customer_id: parseInt(newRental.customer_id),
-          bike_type_id: parseInt(newRental.bike_type_id),
-          rental_pricing_id: parseInt(newRental.rental_pricing_id),
           status: newRental.status,
           start_date: convertToUTC(new Date()).toISOString(),
-        }]);
+        }])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (rentalError) throw rentalError;
+
+      // Then create the rental items
+      const rentalItems = newRental.items.map(item => ({
+        rental_id: rentalData.id,
+        bike_type_id: parseInt(item.bike_type_id),
+        rental_pricing_id: parseInt(item.rental_pricing_id),
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('rental_items')
+        .insert(rentalItems);
+
+      if (itemsError) throw itemsError;
+
       setShowAddModal(false);
       setNewRental({
         customer_id: '',
-        bike_type_id: '',
-        rental_pricing_id: '',
         status: 'active',
+        items: []
       });
       setAvailableRates([]);
       fetchRentals();
@@ -364,9 +408,21 @@ export default function RentalsPage() {
                   <h3 className="text-lg font-semibold text-gray-900">
                     {customers.find(c => c.id === rental.customer_id)?.name}
                   </h3>
-                  <p className="text-sm text-gray-600">
-                    {bikeTypes.find(b => b.id === rental.bike_type_id)?.type_name}
-                  </p>
+                  <div className="text-sm text-gray-600">
+                    {rental.rental_items?.map((item, index) => (
+                      <div key={item.id} className="flex justify-between items-center">
+                        <span>
+                          {bikeTypes.find(b => b.id === item.bike_type_id)?.type_name}
+                          {item.rental_pricing && ` - ${item.rental_pricing.duration} ${item.rental_pricing.duration_unit}`}
+                        </span>
+                        {item.rental_pricing && (
+                          <span className="font-medium ml-2">
+                            ${item.rental_pricing.price.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(rental.status)}`}>
                   {rental.status}
@@ -374,18 +430,6 @@ export default function RentalsPage() {
               </div>
               
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Duration:</span>
-                  <span className="font-medium">
-                    {rental.rental_pricing ? `${rental.rental_pricing.duration} ${rental.rental_pricing.duration_unit}` : '-'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Price:</span>
-                  <span className="font-medium">
-                    {rental.rental_pricing ? `$${rental.rental_pricing.price}` : '-'}
-                  </span>
-                </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Start:</span>
                   <span className="font-medium">
@@ -395,11 +439,20 @@ export default function RentalsPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600">End:</span>
                   <span className="font-medium">
-                    {rental.rental_pricing ? calculateEndDate(
-                      rental.start_date,
-                      rental.rental_pricing.duration,
-                      rental.rental_pricing.duration_unit
-                    ) : '-'}
+                    {rental.rental_items && rental.rental_items.length > 0 && rental.rental_items[0].rental_pricing ? 
+                      calculateEndDate(
+                        rental.start_date,
+                        rental.rental_items[0].rental_pricing.duration,
+                        rental.rental_items[0].rental_pricing.duration_unit
+                      ) : '-'}
+                  </span>
+                </div>
+                <div className="flex justify-between font-semibold text-gray-900 pt-2 border-t border-gray-200">
+                  <span>Total Amount:</span>
+                  <span>
+                    ${rental.rental_items?.reduce((total, item) => 
+                      total + (item.rental_pricing?.price || 0), 0
+                    ).toFixed(2)}
                   </span>
                 </div>
                 <div className="mt-4 pt-3 border-t border-gray-200 flex gap-2">
@@ -424,7 +477,7 @@ export default function RentalsPage() {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold mb-4">Add New Rental</h2>
             <form onSubmit={handleAddRental}>
               <div className="mb-4">
@@ -435,7 +488,7 @@ export default function RentalsPage() {
                   <select
                     id="customer"
                     value={newRental.customer_id}
-                    onChange={(e) => setNewRental({ ...newRental, customer_id: e.target.value })}
+                    onChange={(e) => setNewRental(prev => ({ ...prev, customer_id: e.target.value }))}
                     className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                     required
                   >
@@ -449,58 +502,80 @@ export default function RentalsPage() {
                   <button
                     type="button"
                     onClick={() => setShowAddCustomerModal(true)}
-                    className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition-colors"
-                    title="Add Customer"
+                    className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                    </svg>
+                    Add New
                   </button>
                 </div>
               </div>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="bike_type">
-                  Bike Type
-                </label>
-                <select
-                  id="bike_type"
-                  value={newRental.bike_type_id}
-                  onChange={handleBikeTypeChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required
-                >
-                  <option value="">Select a bike type</option>
-                  {bikeTypes.map((bikeType) => (
-                    <option key={bikeType.id} value={bikeType.id}>
-                      {bikeType.type_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {newRental.bike_type_id && (
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="duration">
-                    Duration
-                  </label>
-                  <select
-                    id="duration"
-                    value={newRental.rental_pricing_id}
-                    onChange={handleDurationChange}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                    required
-                  >
-                    <option value="">Select duration</option>
-                    {availableRates.map((rate) => (
-                      <option 
-                        key={rate.id} 
-                        value={rate.id}
+
+              {newRental.items.map((item, index) => (
+                <div key={index} className="mb-4 p-4 border rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold">Bike {index + 1}</h3>
+                    {index > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => removeBikeFromRental(index)}
+                        className="text-red-600 hover:text-red-800"
                       >
-                        {rate.duration} {rate.duration_unit}{rate.duration > 1 ? 's' : ''} - ${rate.price.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Bike Type
+                    </label>
+                    <select
+                      value={item.bike_type_id}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleBikeTypeChange(index, e.target.value)}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      required
+                    >
+                      <option value="">Select a bike type</option>
+                      {bikeTypes.map((bikeType) => (
+                        <option key={bikeType.id} value={bikeType.id}>
+                          {bikeType.type_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {item.bike_type_id && (
+                    <div className="mb-4">
+                      <label className="block text-gray-700 text-sm font-bold mb-2">
+                        Duration
+                      </label>
+                      <select
+                        value={item.rental_pricing_id}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDurationChange(index, e.target.value)}
+                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        required
+                      >
+                        <option value="">Select duration</option>
+                        {rentalRates
+                          .filter(r => r.bike_type_id === parseInt(item.bike_type_id))
+                          .map((rate) => (
+                            <option key={rate.id} value={rate.id}>
+                              {rate.duration} {rate.duration_unit}{rate.duration > 1 ? 's' : ''} - ${rate.price.toFixed(2)}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
+
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={addNewBikeToRental}
+                  className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300"
+                >
+                  Add Another Bike
+                </button>
+              </div>
+
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
@@ -508,9 +583,8 @@ export default function RentalsPage() {
                     setShowAddModal(false);
                     setNewRental({
                       customer_id: '',
-                      bike_type_id: '',
-                      rental_pricing_id: '',
                       status: 'active',
+                      items: []
                     });
                     setAvailableRates([]);
                   }}
@@ -521,7 +595,7 @@ export default function RentalsPage() {
                 <button
                   type="submit"
                   className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                  disabled={!newRental.rental_pricing_id}
+                  disabled={!newRental.customer_id || newRental.items.length === 0 || newRental.items.some(item => !item.rental_pricing_id)}
                 >
                   Add Rental
                 </button>

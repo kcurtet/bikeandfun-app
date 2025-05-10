@@ -35,12 +35,21 @@ INSERT INTO public.rental_pricing (bike_type_id, duration, duration_unit, price,
 (5, 1, 'hour', 8.00, true);     -- Kids Bike hourly
 
 -- Insert sample rentals
-INSERT INTO public.rentals (customer_id, bike_type_id, rental_pricing_id, status, start_date) VALUES
-(1, 1, 2, 'completed', '2024-05-01 09:00:00'),  -- John Doe rented a Mountain Bike for a day
-(2, 3, 6, 'active', '2024-05-02 10:00:00'),     -- Jane Smith rented an Electric Bike for an hour
-(3, 2, 4, 'completed', '2024-05-03 11:00:00'),  -- Bob Johnson rented a Road Bike for an hour
-(4, 4, 8, 'active', '2024-05-04 13:00:00'),     -- Alice Brown rented a City Bike for a day
-(5, 5, 10, 'canceled', '2024-05-05 14:00:00');  -- Charlie Wilson's Kids Bike rental was canceled
+INSERT INTO public.rentals (customer_id, status, start_date) VALUES
+(1, 'completed', '2024-05-01 09:00:00'),  -- John Doe's rental
+(2, 'active', '2024-05-02 10:00:00'),     -- Jane Smith's rental
+(3, 'completed', '2024-05-03 11:00:00'),  -- Bob Johnson's rental
+(4, 'active', '2024-05-04 13:00:00'),     -- Alice Brown's rental
+(5, 'canceled', '2024-05-05 14:00:00');   -- Charlie Wilson's rental
+
+-- Insert sample rental items
+INSERT INTO public.rental_items (rental_id, bike_type_id, rental_pricing_id) VALUES
+(1, 1, 2),  -- John Doe rented a Mountain Bike for a day
+(2, 3, 6),  -- Jane Smith rented an Electric Bike for an hour
+(2, 4, 8),  -- Jane Smith also rented a City Bike for a day
+(3, 2, 4),  -- Bob Johnson rented a Road Bike for an hour
+(4, 4, 8),  -- Alice Brown rented a City Bike for a day
+(5, 5, 10); -- Charlie Wilson's Kids Bike rental was canceled
 
 -- Insert sample repairs
 INSERT INTO public.repairs (customer_id, bike_model, repair_start, repair_end, delivery_date, price, notes, status) VALUES
