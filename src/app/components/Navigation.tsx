@@ -16,6 +16,7 @@ export default function Navigation() {
     { href: '/customers', label: 'Clientes' },
     { href: '/rentals', label: 'Alquileres' },
     { href: '/repairs', label: 'Reparaciones' },
+    { href: '/statistics', label: 'Estadísticas' },
     { href: '/settings', label: 'Configuración' },
   ];
 

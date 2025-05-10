@@ -50,11 +50,11 @@ interface RentalRate {
 // Status-related functions
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'activo':
+    case 'active':
       return 'bg-green-100 text-green-800';
-    case 'completado':
+    case 'completed':
       return 'bg-blue-100 text-blue-800';
-    case 'cancelado':
+    case 'canceled':
       return 'bg-red-100 text-red-800';
     default:
       return 'bg-gray-100 text-gray-800';
@@ -63,10 +63,10 @@ const getStatusColor = (status: string) => {
 
 const getNextStatus = (currentStatus: string): string => {
   switch (currentStatus) {
-    case 'activo':
-      return 'completado';
-    case 'completado':
-      return 'cancelado';
+    case 'active':
+      return 'completed';
+    case 'completed':
+      return 'canceled';
     default:
       return currentStatus;
   }
@@ -74,9 +74,9 @@ const getNextStatus = (currentStatus: string): string => {
 
 const getStatusButtonText = (status: string): string => {
   switch (status) {
-    case 'activo':
+    case 'active':
       return 'Completar Alquiler';
-    case 'completado':
+    case 'completed':
       return 'Cancelar Alquiler';
     default:
       return '';
@@ -109,12 +109,8 @@ export default function RentalsPage() {
   });
   const [newRental, setNewRental] = useState({
     customer_id: '',
-    status: 'active' as const,
-    items: [] as {
-      bike_type_id: string;
-      rental_pricing_id: string;
-      quantity: number;
-    }[]
+    status: 'active',
+    items: [] as { bike_type_id: string; rental_pricing_id: string; quantity: number }[]
   });
   const [availableRates, setAvailableRates] = useState<RentalRate[]>([]);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
