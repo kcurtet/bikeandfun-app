@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Link from 'next/link';
 import { formatDateTime } from '@/utils/dateUtils';
@@ -48,12 +48,7 @@ export default function RepairsHistoryPage() {
   const [selectedRepair, setSelectedRepair] = useState<Repair | null>(null);
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    fetchRepairs();
-    fetchCustomers();
-  }, []);
-
-  const fetchRepairs = async () => {
+  const fetchRepairs = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('repairs')
@@ -68,9 +63,9 @@ export default function RepairsHistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase]);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('customers')
@@ -81,7 +76,12 @@ export default function RepairsHistoryPage() {
     } catch (error) {
       console.error('Error fetching customers:', error);
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchRepairs();
+    fetchCustomers();
+  }, [fetchRepairs, fetchCustomers]);
 
   return (
     <div className="container mx-auto px-4 py-8">

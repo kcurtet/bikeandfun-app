@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Link from 'next/link';
 import { formatDateTime } from '@/utils/dateUtils';
@@ -57,13 +57,7 @@ export default function RentalHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    fetchRentals();
-    fetchCustomers();
-    fetchBikeTypes();
-  }, []);
-
-  const fetchRentals = async () => {
+  const fetchRentals = useCallback(async () => {
     try {
       setError(null);
       const { data, error } = await supabase
@@ -93,9 +87,9 @@ export default function RentalHistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase]);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       setError(null);
       const { data, error } = await supabase
@@ -108,9 +102,9 @@ export default function RentalHistoryPage() {
       console.error('Error fetching customers:', error);
       setError(error instanceof Error ? error.message : 'An unexpected error occurred while fetching customers');
     }
-  };
+  }, [supabase]);
 
-  const fetchBikeTypes = async () => {
+  const fetchBikeTypes = useCallback(async () => {
     try {
       setError(null);
       const { data, error } = await supabase
@@ -123,7 +117,13 @@ export default function RentalHistoryPage() {
       console.error('Error fetching bike types:', error);
       setError(error instanceof Error ? error.message : 'An unexpected error occurred while fetching bike types');
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchRentals();
+    fetchCustomers();
+    fetchBikeTypes();
+  }, [fetchRentals, fetchCustomers, fetchBikeTypes]);
 
   const calculateEndDate = (startDate: string, duration: number, durationUnit: string): string => {
     try {
@@ -132,7 +132,7 @@ export default function RentalHistoryPage() {
         return '-';
       }
 
-      let endDate = new Date(date);
+      const endDate = new Date(date);
       switch (durationUnit) {
         case 'hour':
           endDate.setHours(endDate.getHours() + duration);

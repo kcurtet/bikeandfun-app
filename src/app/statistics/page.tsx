@@ -1,39 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
-interface RentalStats {
-  total_revenue: number;
-  total_rentals: number;
-  average_price: number;
-  by_bike_type: {
-    bike_type_id: number;
-    type_name: string;
-    revenue: number;
-    count: number;
-  }[];
-  by_month: {
-    month: string;
-    revenue: number;
-    count: number;
-  }[];
-}
-
-interface RepairStats {
-  total_revenue: number;
-  total_repairs: number;
-  average_price: number;
-  by_status: {
-    status: string;
-    count: number;
-    revenue: number;
-  }[];
-  by_month: {
-    month: string;
-    revenue: number;
-    count: number;
-  }[];
+interface BikeType {
+  id: number;
+  type_name: string;
 }
 
 interface RentalPricing {
@@ -42,226 +14,251 @@ interface RentalPricing {
 
 interface RentalItem {
   bike_type_id: number;
-  quantity: number;
-  rental_pricing: RentalPricing;
+  bike_type?: BikeType;
+  rental_pricing?: RentalPricing;
 }
 
 interface Rental {
   id: number;
-  status: 'active' | 'completed' | 'cancelled';
   created_at: string;
-  start_date: string;
   rental_items: RentalItem[];
 }
 
+interface Repair {
+  id: number;
+  created_at: string;
+  total_price: number;
+  bike_type?: BikeType;
+}
+
+interface RentalStats {
+  totalRevenue: number;
+  totalRentals: number;
+  averagePrice: number;
+  byBikeType: Array<{
+    type: string;
+    count: number;
+    revenue: number;
+    averagePrice: number;
+  }>;
+  byMonth: Array<{
+    month: string;
+    count: number;
+    revenue: number;
+    averagePrice: number;
+  }>;
+}
+
+interface RepairStats {
+  totalRevenue: number;
+  totalRepairs: number;
+  averagePrice: number;
+  byBikeType: Array<{
+    type: string;
+    count: number;
+    revenue: number;
+    averagePrice: number;
+  }>;
+  byMonth: Array<{
+    month: string;
+    count: number;
+    revenue: number;
+    averagePrice: number;
+  }>;
+}
+
 export default function StatisticsPage() {
-  const [rentalStats, setRentalStats] = useState<RentalStats | null>(null);
-  const [repairStats, setRepairStats] = useState<RepairStats | null>(null);
+  const [rentalStats, setRentalStats] = useState<RentalStats>({
+    totalRevenue: 0,
+    totalRentals: 0,
+    averagePrice: 0,
+    byBikeType: [],
+    byMonth: [],
+  });
+  const [repairStats, setRepairStats] = useState<RepairStats>({
+    totalRevenue: 0,
+    totalRepairs: 0,
+    averagePrice: 0,
+    byBikeType: [],
+    byMonth: [],
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
   const [activeTab, setActiveTab] = useState<'rentals' | 'repairs'>('rentals');
-
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    fetchStats();
-  }, [timeRange]);
+  const fetchStats = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
 
-  const fetchStats = async () => {
     try {
-      setIsLoading(true);
-      const now = new Date();
-      let startDate = new Date();
-
-      // Calcular la fecha de inicio según el rango seleccionado
+      const startDate = new Date();
       switch (timeRange) {
         case 'week':
-          startDate.setDate(now.getDate() - 7);
+          startDate.setDate(startDate.getDate() - 7);
           break;
         case 'month':
-          startDate.setMonth(now.getMonth() - 1);
+          startDate.setMonth(startDate.getMonth() - 1);
           break;
         case 'year':
-          startDate.setFullYear(now.getFullYear() - 1);
+          startDate.setFullYear(startDate.getFullYear() - 1);
           break;
       }
 
-      // Obtener estadísticas de alquileres
+      // Fetch rentals
       const { data: rentals, error: rentalsError } = await supabase
         .from('rentals')
         .select(`
-          id,
-          status,
-          created_at,
-          start_date,
-          rental_items!inner (
-            bike_type_id,
-            quantity,
-            rental_pricing!inner (
+          *,
+          rental_items (
+            *,
+            bike_type: bike_types (
+              type_name
+            ),
+            rental_pricing (
               price
             )
           )
         `)
-        .eq('status', 'completed')
-        .gte('start_date', startDate.toISOString());
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: false });
 
       if (rentalsError) throw rentalsError;
 
-      console.log('Fecha inicio:', startDate.toISOString());
-      console.log('Fecha fin:', now.toISOString());
-      console.log('Alquileres:', rentals);
+      // Calculate rental statistics
+      const rentalData = rentals as unknown as Rental[];
+      const totalRentalRevenue = rentalData.reduce((sum, rental) => {
+        return sum + rental.rental_items.reduce((itemSum, item) => {
+          return itemSum + (item.rental_pricing?.price || 0);
+        }, 0);
+      }, 0);
 
-      // Obtener tipos de bicicletas
-      const { data: bikeTypes, error: bikeTypesError } = await supabase
-        .from('bike_types')
-        .select('id, type_name');
-
-      if (bikeTypesError) throw bikeTypesError;
-
-      console.log('Tipos de bicicletas:', bikeTypes);
-
-      // Calcular estadísticas de alquileres
-      const totalRentalRevenue = rentals?.reduce((sum, rental) => {
-        const rentalTotal = rental.rental_items.reduce((itemSum, item) => 
-          itemSum + ((item.rental_pricing as any).price || 0) * item.quantity, 0
-        );
-        return sum + rentalTotal;
-      }, 0) || 0;
-
-      console.log('Ingresos totales alquileres:', totalRentalRevenue);
-
-      const totalRentals = rentals?.length || 0;
+      const totalRentals = rentalData.length;
       const averageRentalPrice = totalRentals > 0 ? totalRentalRevenue / totalRentals : 0;
 
-      // Estadísticas por tipo de bicicleta
-      const byBikeType = bikeTypes?.map(type => {
-        const typeRentals = rentals?.filter(rental => 
-          rental.rental_items.some(item => item.bike_type_id === type.id)
-        ) || [];
-        
-        const revenue = typeRentals.reduce((sum, rental) => {
-          const typeItems = rental.rental_items.filter(item => item.bike_type_id === type.id);
-          return sum + typeItems.reduce((itemSum, item) => 
-            itemSum + ((item.rental_pricing as any).price || 0) * item.quantity, 0
-          );
-        }, 0);
-
-        return {
-          bike_type_id: type.id,
-          type_name: type.type_name,
-          revenue,
-          count: typeRentals.length
-        };
-      }) || [];
-
-      // Estadísticas mensuales de alquileres
-      const rentalByMonth = rentals?.reduce((acc: { [key: string]: { revenue: number; count: number } }, rental) => {
-        const month = new Date(rental.created_at).toLocaleString('es-ES', { month: 'long', year: 'numeric' });
-        if (!acc[month]) {
-          acc[month] = { revenue: 0, count: 0 };
-        }
-        const rentalTotal = rental.rental_items.reduce((itemSum, item) => 
-          itemSum + ((item.rental_pricing as any).price || 0) * item.quantity, 0
-        );
-        acc[month].revenue += rentalTotal;
-        acc[month].count += 1;
+      // Calculate statistics by bike type
+      const typeRentals = rentalData.reduce((acc, rental) => {
+        rental.rental_items.forEach(item => {
+          const typeName = item.bike_type?.type_name || 'Unknown';
+          if (!acc[typeName]) {
+            acc[typeName] = { count: 0, revenue: 0 };
+          }
+          acc[typeName].count++;
+          acc[typeName].revenue += item.rental_pricing?.price || 0;
+        });
         return acc;
-      }, {}) || {};
+      }, {} as Record<string, { count: number; revenue: number }>);
 
-      const rentalMonthlyStats = Object.entries(rentalByMonth)
-        .map(([month, data]) => ({
-          month,
-          revenue: data.revenue,
-          count: data.count,
-          date: new Date(month)
-        }))
-        .sort((a, b) => b.date.getTime() - a.date.getTime())
-        .map(({ month, revenue, count }) => ({ month, revenue, count }));
+      const byBikeType = Object.entries(typeRentals).map(([type, stats]) => ({
+        type,
+        count: stats.count,
+        revenue: stats.revenue,
+        averagePrice: stats.revenue / stats.count,
+      }));
+
+      // Calculate statistics by month
+      const rentalByMonth = rentalData.reduce((acc, rental) => {
+        const month = new Date(rental.created_at).toLocaleString('default', { month: 'long' });
+        if (!acc[month]) {
+          acc[month] = { count: 0, revenue: 0 };
+        }
+        acc[month].count++;
+        acc[month].revenue += rental.rental_items.reduce((sum, item) => {
+          return sum + (item.rental_pricing?.price || 0);
+        }, 0);
+        return acc;
+      }, {} as Record<string, { count: number; revenue: number }>);
+
+      const byMonth = Object.entries(rentalByMonth).map(([month, stats]) => ({
+        month,
+        count: stats.count,
+        revenue: stats.revenue,
+        averagePrice: stats.revenue / stats.count,
+      }));
 
       setRentalStats({
-        total_revenue: totalRentalRevenue,
-        total_rentals: totalRentals,
-        average_price: averageRentalPrice,
-        by_bike_type: byBikeType,
-        by_month: rentalMonthlyStats
+        totalRevenue: totalRentalRevenue,
+        totalRentals,
+        averagePrice: averageRentalPrice,
+        byBikeType,
+        byMonth,
       });
 
-      // Obtener estadísticas de reparaciones
+      // Fetch repairs
       const { data: repairs, error: repairsError } = await supabase
         .from('repairs')
-        .select('*')
-        .eq('status', 'delivered')
+        .select(`
+          *,
+          bike_type: bike_types (
+            type_name
+          )
+        `)
         .gte('created_at', startDate.toISOString())
-        .lte('created_at', now.toISOString());
+        .order('created_at', { ascending: false });
 
       if (repairsError) throw repairsError;
 
-      console.log('Reparaciones:', repairs);
-
-      // Calcular estadísticas de reparaciones
-      const totalRepairRevenue = repairs?.reduce((sum, repair) => sum + (repair.price || 0), 0) || 0;
-      console.log('Ingresos totales reparaciones:', totalRepairRevenue);
-
-      const totalRepairs = repairs?.length || 0;
+      // Calculate repair statistics
+      const repairData = repairs as unknown as Repair[];
+      const totalRepairRevenue = repairData.reduce((sum, repair) => sum + (repair.total_price || 0), 0);
+      const totalRepairs = repairData.length;
       const averageRepairPrice = totalRepairs > 0 ? totalRepairRevenue / totalRepairs : 0;
 
-      // Estadísticas por estado de reparación
-      const byStatus = repairs?.reduce((acc: { [key: string]: { count: number; revenue: number } }, repair) => {
-        if (!acc[repair.status]) {
-          acc[repair.status] = { count: 0, revenue: 0 };
+      // Calculate statistics by bike type
+      const repairTypeStats = repairData.reduce((acc, repair) => {
+        const typeName = repair.bike_type?.type_name || 'Unknown';
+        if (!acc[typeName]) {
+          acc[typeName] = { count: 0, revenue: 0 };
         }
-        acc[repair.status].count += 1;
-        acc[repair.status].revenue += repair.price || 0;
+        acc[typeName].count++;
+        acc[typeName].revenue += repair.total_price || 0;
         return acc;
-      }, {}) || {};
+      }, {} as Record<string, { count: number; revenue: number }>);
 
-      const repairByStatus = Object.entries(byStatus).map(([status, data]) => ({
-        status,
-        count: data.count,
-        revenue: data.revenue
+      const repairByBikeType = Object.entries(repairTypeStats).map(([type, stats]) => ({
+        type,
+        count: stats.count,
+        revenue: stats.revenue,
+        averagePrice: stats.revenue / stats.count,
       }));
 
-      // Estadísticas mensuales de reparaciones
-      const repairByMonth = repairs?.reduce((acc: { [key: string]: { revenue: number; count: number } }, repair) => {
-        const month = new Date(repair.created_at).toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+      // Calculate statistics by month
+      const repairByMonth = repairData.reduce((acc, repair) => {
+        const month = new Date(repair.created_at).toLocaleString('default', { month: 'long' });
         if (!acc[month]) {
-          acc[month] = { revenue: 0, count: 0 };
+          acc[month] = { count: 0, revenue: 0 };
         }
-        acc[month].revenue += repair.price || 0;
-        acc[month].count += 1;
+        acc[month].count++;
+        acc[month].revenue += repair.total_price || 0;
         return acc;
-      }, {}) || {};
+      }, {} as Record<string, { count: number; revenue: number }>);
 
-      const repairMonthlyStats = Object.entries(repairByMonth)
-        .map(([month, data]) => ({
-          month,
-          revenue: data.revenue,
-          count: data.count,
-          date: new Date(month)
-        }))
-        .sort((a, b) => b.date.getTime() - a.date.getTime())
-        .map(({ month, revenue, count }) => ({ month, revenue, count }));
+      const repairByMonthStats = Object.entries(repairByMonth).map(([month, stats]) => ({
+        month,
+        count: stats.count,
+        revenue: stats.revenue,
+        averagePrice: stats.revenue / stats.count,
+      }));
 
       setRepairStats({
-        total_revenue: totalRepairRevenue,
-        total_repairs: totalRepairs,
-        average_price: averageRepairPrice,
-        by_status: repairByStatus,
-        by_month: repairMonthlyStats
+        totalRevenue: totalRepairRevenue,
+        totalRepairs,
+        averagePrice: averageRepairPrice,
+        byBikeType: repairByBikeType,
+        byMonth: repairByMonthStats,
       });
-
     } catch (error) {
       console.error('Error fetching statistics:', error);
-      if (error instanceof Error) {
-        setError(`Error al cargar las estadísticas: ${error.message}`);
-      } else {
-        setError('Error al cargar las estadísticas');
-      }
+      setError('Error al cargar las estadísticas');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase, timeRange]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   if (isLoading) {
     return (
@@ -354,19 +351,19 @@ export default function StatisticsPage() {
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Ingresos Totales</h3>
                 <p className="text-3xl font-bold text-blue-600">
-                  {rentalStats.total_revenue.toFixed(2)}€
+                  {rentalStats.totalRevenue.toFixed(2)}€
                 </p>
               </div>
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Alquileres</h3>
                 <p className="text-3xl font-bold text-blue-600">
-                  {rentalStats.total_rentals}
+                  {rentalStats.totalRentals}
                 </p>
               </div>
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Precio Promedio</h3>
                 <p className="text-3xl font-bold text-blue-600">
-                  {rentalStats.average_price.toFixed(2)}€
+                  {rentalStats.averagePrice.toFixed(2)}€
                 </p>
               </div>
             </div>
@@ -375,10 +372,10 @@ export default function StatisticsPage() {
             <div className="bg-white rounded-lg shadow-md p-6 mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Ingresos por Tipo de Bicicleta</h2>
               <div className="space-y-4">
-                {rentalStats.by_bike_type.map((type) => (
-                  <div key={type.bike_type_id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                {rentalStats.byBikeType.map((type) => (
+                  <div key={type.type} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                     <div>
-                      <h3 className="text-base font-medium text-gray-900">{type.type_name}</h3>
+                      <h3 className="text-base font-medium text-gray-900">{type.type}</h3>
                       <p className="text-sm text-gray-600">{type.count} alquileres</p>
                     </div>
                     <p className="text-lg font-semibold text-blue-600">{type.revenue.toFixed(2)}€</p>
@@ -391,7 +388,7 @@ export default function StatisticsPage() {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Ingresos Mensuales</h2>
               <div className="space-y-4">
-                {rentalStats.by_month.map((month) => (
+                {rentalStats.byMonth.map((month) => (
                   <div key={month.month} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                     <div>
                       <h3 className="text-base font-medium text-gray-900">{month.month}</h3>
@@ -416,19 +413,19 @@ export default function StatisticsPage() {
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Ingresos Totales</h3>
                 <p className="text-3xl font-bold text-blue-600">
-                  {repairStats.total_revenue.toFixed(2)}€
+                  {repairStats.totalRevenue.toFixed(2)}€
                 </p>
               </div>
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Reparaciones</h3>
                 <p className="text-3xl font-bold text-blue-600">
-                  {repairStats.total_repairs}
+                  {repairStats.totalRepairs}
                 </p>
               </div>
               <div className="bg-white rounded-lg shadow-md p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Precio Promedio</h3>
                 <p className="text-3xl font-bold text-blue-600">
-                  {repairStats.average_price.toFixed(2)}€
+                  {repairStats.averagePrice.toFixed(2)}€
                 </p>
               </div>
             </div>
@@ -437,11 +434,11 @@ export default function StatisticsPage() {
             <div className="bg-white rounded-lg shadow-md p-6 mb-8">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Reparaciones por Estado</h2>
               <div className="space-y-4">
-                {repairStats.by_status.map((status) => (
-                  <div key={status.status} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+                {repairStats.byBikeType.map((status) => (
+                  <div key={status.type} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                     <div>
                       <h3 className="text-base font-medium text-gray-900">
-                        {status.status.charAt(0).toUpperCase() + status.status.slice(1)}
+                        {status.type.charAt(0).toUpperCase() + status.type.slice(1)}
                       </h3>
                       <p className="text-sm text-gray-600">{status.count} reparaciones</p>
                     </div>
@@ -455,7 +452,7 @@ export default function StatisticsPage() {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Ingresos Mensuales</h2>
               <div className="space-y-4">
-                {repairStats.by_month.map((month) => (
+                {repairStats.byMonth.map((month) => (
                   <div key={month.month} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                     <div>
                       <h3 className="text-base font-medium text-gray-900">{month.month}</h3>
@@ -475,4 +472,4 @@ export default function StatisticsPage() {
       )}
     </div>
   );
-} 
+}

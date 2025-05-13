@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface BikeType {
@@ -20,32 +20,28 @@ interface RentalPricing {
 export default function SettingsPage() {
   const [bikeTypes, setBikeTypes] = useState<BikeType[]>([]);
   const [rentalPricing, setRentalPricing] = useState<RentalPricing[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddBikeTypeModal, setShowAddBikeTypeModal] = useState(false);
   const [showAddPricingModal, setShowAddPricingModal] = useState(false);
   const [selectedBikeType, setSelectedBikeType] = useState<string>('');
-  const [newBikeType, setNewBikeType] = useState({ type_name: '', description: '' });
+  const [newBikeType, setNewBikeType] = useState({
+    type_name: '',
+    description: ''
+  });
   const [newPricing, setNewPricing] = useState({
     bike_type_id: '',
     duration: '',
-    duration_unit: 'hour',
-    price: '',
+    duration_unit: 'hour' as 'hour' | 'day' | 'week',
+    price: ''
   });
-
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    fetchBikeTypes();
-    fetchRentalPricing();
-  }, []);
-
-  const fetchBikeTypes = async () => {
+  const fetchBikeTypes = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('bike_types')
         .select('*')
-        .order('type_name');
+        .order('type_name', { ascending: true });
 
       if (error) throw error;
       setBikeTypes(data || []);
@@ -53,13 +49,15 @@ export default function SettingsPage() {
       console.error('Error fetching bike types:', error);
       setError('Error al cargar los tipos de bicicletas');
     }
-  };
+  }, [supabase]);
 
-  const fetchRentalPricing = async () => {
+  const fetchRentalPricing = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('rental_pricing')
-        .select('*');
+        .select('*')
+        .eq('is_active', true)
+        .order('bike_type_id', { ascending: true });
 
       if (error) throw error;
       
@@ -88,10 +86,13 @@ export default function SettingsPage() {
     } catch (error) {
       console.error('Error fetching rental pricing:', error);
       setError('Error al cargar los precios de alquiler');
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchBikeTypes();
+    fetchRentalPricing();
+  }, [fetchBikeTypes, fetchRentalPricing]);
 
   const handleAddBikeType = async (e: React.FormEvent) => {
     e.preventDefault();

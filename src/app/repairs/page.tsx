@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import Link from 'next/link';
-import { convertToUTC, convertToLocal, formatDateTime } from '@/utils/dateUtils';
+import { convertToUTC, formatDateTime } from '@/utils/dateUtils';
 
 interface Repair {
   id: number;
@@ -22,18 +22,6 @@ interface Customer {
   id: number;
   name: string;
 }
-
-// Add a function to translate status to Spanish for UI
-const translateStatus = (status: string) => {
-  switch (status) {
-    case 'pending': return 'Pendiente';
-    case 'in progress': return 'En progreso';
-    case 'completed': return 'Completado';
-    case 'delivered': return 'Entregado';
-    case 'canceled': return 'Cancelado';
-    default: return status;
-  }
-};
 
 // Update getStatusColor to use English status values
 const getStatusColor = (status: string) => {
@@ -71,11 +59,11 @@ const getNextStatus = (currentStatus: string): string => {
 const getStatusButtonText = (status: string): string => {
   switch (status) {
     case 'pending':
-      return 'Iniciar';
+      return 'Iniciar Reparación';
     case 'in progress':
-      return 'Completar';
+      return 'Completar Reparación';
     case 'completed':
-      return 'Entregar';
+      return 'Marcar como Entregado';
     default:
       return '';
   }
@@ -97,43 +85,33 @@ export default function RepairsPage() {
     customer_id: '',
     bike_model: '',
     repair_start: '',
-    repair_end: '',
     delivery_date: '',
     price: '',
     notes: '',
-    status: 'pending' as const,
+    status: 'pending' as const
   });
   const [selectedRepair, setSelectedRepair] = useState<Repair | null>(null);
   const supabase = createClientComponentClient();
 
-  useEffect(() => {
-    fetchRepairs();
-    fetchCustomers();
-  }, []);
-
-  const fetchRepairs = async () => {
+  const fetchRepairs = useCallback(async () => {
     try {
-      setError(null);
       const { data, error } = await supabase
         .from('repairs')
         .select('*')
-        .not('status', 'eq', 'delivered')
-        .not('status', 'eq', 'canceled')
-        .order('delivery_date', { ascending: true });
+        .not('status', 'in', ['canceled', 'delivered'])
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       setRepairs(data || []);
     } catch (error) {
       console.error('Error fetching repairs:', error);
-      setError('Error al cargar las reparaciones. Por favor, intenta de nuevo.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase]);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
-      setError(null);
       const { data, error } = await supabase
         .from('customers')
         .select('id, name');
@@ -142,25 +120,27 @@ export default function RepairsPage() {
       setCustomers(data || []);
     } catch (error) {
       console.error('Error fetching customers:', error);
-      setError('Error al cargar los clientes. Por favor, intenta de nuevo.');
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchRepairs();
+    fetchCustomers();
+  }, [fetchRepairs, fetchCustomers]);
 
   const handleAddRepair = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setError(null);
       const { error } = await supabase
         .from('repairs')
         .insert([{
-          customer_id: parseInt(newRepair.customer_id),
+          customer_id: newRepair.customer_id,
           bike_model: newRepair.bike_model,
-          repair_start: null,
-          repair_end: newRepair.repair_end || null,
-          delivery_date: newRepair.delivery_date ? convertToUTC(new Date(newRepair.delivery_date)).toISOString() : null,
-          price: parseFloat(newRepair.price) || 0,
+          repair_start: convertToUTC(new Date()),
+          delivery_date: newRepair.delivery_date ? convertToUTC(new Date(newRepair.delivery_date)) : null,
+          price: parseFloat(newRepair.price),
           notes: newRepair.notes,
-          status: 'pending',
+          status: 'pending'
         }]);
 
       if (error) throw error;
@@ -169,16 +149,14 @@ export default function RepairsPage() {
         customer_id: '',
         bike_model: '',
         repair_start: '',
-        repair_end: '',
         delivery_date: '',
         price: '',
         notes: '',
-        status: 'pending',
+        status: 'pending'
       });
       fetchRepairs();
     } catch (error) {
       console.error('Error adding repair:', error);
-      setError('Error al agregar la reparación. Por favor, intenta de nuevo.');
     }
   };
 
@@ -209,58 +187,43 @@ export default function RepairsPage() {
     if (nextStatus === currentStatus) return;
 
     try {
-      setError(null);
-      const updateData: any = { status: nextStatus };
-      
-      if (nextStatus === 'in progress') {
-        updateData.repair_start = convertToUTC(new Date()).toISOString();
-      } else if (nextStatus === 'completed') {
-        updateData.repair_end = convertToUTC(new Date()).toISOString();
-      }
-
       const { error } = await supabase
         .from('repairs')
-        .update(updateData)
+        .update({ status: nextStatus })
         .eq('id', repairId);
 
       if (error) throw error;
       fetchRepairs();
     } catch (error) {
       console.error('Error updating repair status:', error);
-      setError('Error al actualizar el estado de la reparación. Por favor, intenta de nuevo.');
     }
   };
 
   const handleCancelRepair = async (repairId: number) => {
     try {
-      setError(null);
       const { error } = await supabase
         .from('repairs')
-        .update({ 
-          status: 'canceled',
-          repair_end: convertToUTC(new Date()).toISOString()
-        })
+        .update({ status: 'canceled' })
         .eq('id', repairId);
 
       if (error) throw error;
       fetchRepairs();
     } catch (error) {
       console.error('Error canceling repair:', error);
-      setError('Error al cancelar la reparación. Por favor, intenta de nuevo.');
     }
   };
 
   const handleShowAddModal = () => {
-    const now = new Date();
-    const deliveryDate = new Date(now.getTime() + 60 * 60 * 1000); // Add 1 hour
-    const formattedDate = convertToUTC(now).toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
-    const formattedDeliveryDate = convertToUTC(deliveryDate).toISOString().slice(0, 16);
-    setNewRepair(prev => ({
-      ...prev,
-      repair_start: formattedDate,
-      delivery_date: formattedDeliveryDate,
-    }));
     setShowAddModal(true);
+    setNewRepair({
+      customer_id: '',
+      bike_model: '',
+      repair_start: convertToUTC(new Date()).toISOString(),
+      delivery_date: '',
+      price: '',
+      notes: '',
+      status: 'pending'
+    });
   };
 
   return (
@@ -505,11 +468,10 @@ export default function RepairsPage() {
                         customer_id: '',
                         bike_model: '',
                         repair_start: '',
-                        repair_end: '',
                         delivery_date: '',
                         price: '',
                         notes: '',
-                        status: 'pending',
+                        status: 'pending'
                       });
                     }}
                     className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"

@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { convertToUTC, convertToLocal, formatDateTime } from '@/utils/dateUtils';
+import { convertToUTC, formatDateTime } from '@/utils/dateUtils';
 
 interface Rental {
   id: number;
@@ -72,28 +71,6 @@ const getNextStatus = (currentStatus: string): string => {
   }
 };
 
-const getStatusButtonText = (status: string): string => {
-  switch (status) {
-    case 'active':
-      return 'Completar Alquiler';
-    case 'completed':
-      return 'Cancelar Alquiler';
-    default:
-      return '';
-  }
-};
-
-const getStatusButtonColor = (status: string): string => {
-  switch (status) {
-    case 'active':
-      return 'bg-green-600 hover:bg-green-700';
-    case 'completed':
-      return 'bg-red-600 hover:bg-red-700';
-    default:
-      return 'bg-gray-600 hover:bg-gray-700';
-  }
-};
-
 export default function RentalsPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -112,19 +89,10 @@ export default function RentalsPage() {
     status: 'active',
     items: [] as { bike_type_id: string; rental_pricing_id: string; quantity: number }[]
   });
-  const [availableRates, setAvailableRates] = useState<RentalRate[]>([]);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   const supabase = createClientComponentClient();
-  const router = useRouter();
 
-  useEffect(() => {
-    fetchRentals();
-    fetchCustomers();
-    fetchBikeTypes();
-    fetchRentalRates();
-  }, []);
-
-  const fetchRentals = async () => {
+  const fetchRentals = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('rentals')
@@ -153,9 +121,9 @@ export default function RentalsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase]);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('customers')
@@ -166,9 +134,9 @@ export default function RentalsPage() {
     } catch (error) {
       console.error('Error fetching customers:', error);
     }
-  };
+  }, [supabase]);
 
-  const fetchBikeTypes = async () => {
+  const fetchBikeTypes = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('bike_types')
@@ -179,9 +147,9 @@ export default function RentalsPage() {
     } catch (error) {
       console.error('Error fetching bike types:', error);
     }
-  };
+  }, [supabase]);
 
-  const fetchRentalRates = async () => {
+  const fetchRentalRates = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('rental_pricing')
@@ -193,34 +161,26 @@ export default function RentalsPage() {
     } catch (error) {
       console.error('Error fetching rental pricing:', error);
     }
-  };
+  }, [supabase]);
 
-  const calculateTotalCost = (bikeTypeId: string, duration: string, durationUnit: string) => {
-    if (!bikeTypeId || !duration || !durationUnit) return '';
-
-    const pricing = rentalRates.find(
-      p => p.bike_type_id === parseInt(bikeTypeId) &&
-           p.duration === parseInt(duration) &&
-           p.duration_unit === durationUnit
-    );
-
-    return pricing ? pricing.price.toString() : '';
-  };
+  useEffect(() => {
+    fetchRentals();
+    fetchCustomers();
+    fetchBikeTypes();
+    fetchRentalRates();
+  }, [fetchRentals, fetchCustomers, fetchBikeTypes, fetchRentalRates]);
 
   const handleBikeTypeChange = (index: number, bikeTypeId: string) => {
     const updatedItems = [...newRental.items];
     updatedItems[index] = {
       ...updatedItems[index],
       bike_type_id: bikeTypeId,
-      rental_pricing_id: '',
+      rental_pricing_id: ''
     };
     setNewRental(prev => ({
       ...prev,
       items: updatedItems
     }));
-
-    const rates = rentalRates.filter(r => r.bike_type_id === parseInt(bikeTypeId));
-    setAvailableRates(rates);
   };
 
   const handleDurationChange = (index: number, rateId: string) => {
@@ -254,25 +214,24 @@ export default function RentalsPage() {
   const handleAddRental = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // First create the rental
-      const { data: rentalData, error: rentalError } = await supabase
+      const { data, error } = await supabase
         .from('rentals')
         .insert([{
-          customer_id: parseInt(newRental.customer_id),
+          customer_id: newRental.customer_id,
           status: newRental.status,
-          start_date: convertToUTC(new Date()).toISOString(),
+          start_date: convertToUTC(new Date())
         }])
         .select()
         .single();
 
-      if (rentalError) throw rentalError;
+      if (error) throw error;
 
-      // Then create the rental items
+      // Insert rental items
       const rentalItems = newRental.items.map(item => ({
-        rental_id: rentalData.id,
-        bike_type_id: parseInt(item.bike_type_id),
-        rental_pricing_id: parseInt(item.rental_pricing_id),
-        quantity: item.quantity,
+        rental_id: data.id,
+        bike_type_id: item.bike_type_id,
+        rental_pricing_id: item.rental_pricing_id,
+        quantity: item.quantity
       }));
 
       const { error: itemsError } = await supabase
@@ -287,7 +246,6 @@ export default function RentalsPage() {
         status: 'active',
         items: []
       });
-      setAvailableRates([]);
       fetchRentals();
     } catch (error) {
       console.error('Error adding rental:', error);
@@ -352,7 +310,7 @@ export default function RentalsPage() {
         return '-';
       }
 
-      let endDate = new Date(date);
+      const endDate = new Date(date);
       switch (durationUnit) {
         case 'hour':
           endDate.setHours(endDate.getHours() + duration);
@@ -659,7 +617,6 @@ export default function RentalsPage() {
                         status: 'active',
                         items: []
                       });
-                      setAvailableRates([]);
                     }}
                     className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
                   >
