@@ -26,9 +26,15 @@ interface Rental {
 
 interface Repair {
   id: number;
+  customer_id: number;
+  bike_model: string;
+  repair_start: string;
+  repair_end: string | null;
+  delivery_date: string | null;
+  price: number;
+  notes: string;
+  status: 'pending' | 'in progress' | 'completed' | 'delivered' | 'canceled';
   created_at: string;
-  total_price: number;
-  bike_type?: BikeType;
 }
 
 interface RentalStats {
@@ -188,12 +194,7 @@ export default function StatisticsPage() {
       // Fetch repairs
       const { data: repairs, error: repairsError } = await supabase
         .from('repairs')
-        .select(`
-          *,
-          bike_type: bike_types (
-            type_name
-          )
-        `)
+        .select('*')
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: false });
 
@@ -201,18 +202,18 @@ export default function StatisticsPage() {
 
       // Calculate repair statistics
       const repairData = repairs as unknown as Repair[];
-      const totalRepairRevenue = repairData.reduce((sum, repair) => sum + (repair.total_price || 0), 0);
+      const totalRepairRevenue = repairData.reduce((sum, repair) => sum + repair.price, 0);
       const totalRepairs = repairData.length;
       const averageRepairPrice = totalRepairs > 0 ? totalRepairRevenue / totalRepairs : 0;
 
-      // Calculate statistics by bike type
+      // Calculate statistics by bike model
       const repairTypeStats = repairData.reduce((acc, repair) => {
-        const typeName = repair.bike_type?.type_name || 'Unknown';
+        const typeName = repair.bike_model || 'Unknown';
         if (!acc[typeName]) {
           acc[typeName] = { count: 0, revenue: 0 };
         }
         acc[typeName].count++;
-        acc[typeName].revenue += repair.total_price || 0;
+        acc[typeName].revenue += repair.price;
         return acc;
       }, {} as Record<string, { count: number; revenue: number }>);
 
@@ -230,7 +231,7 @@ export default function StatisticsPage() {
           acc[month] = { count: 0, revenue: 0 };
         }
         acc[month].count++;
-        acc[month].revenue += repair.total_price || 0;
+        acc[month].revenue += repair.price;
         return acc;
       }, {} as Record<string, { count: number; revenue: number }>);
 
