@@ -11,6 +11,8 @@ interface Rental {
   status: 'active' | 'completed' | 'canceled';
   start_date: string;
   created_at: string;
+  helmet_quantity?: number;
+  lock_quantity?: number;
   rental_items?: {
     id: number;
     bike_type_id: number;
@@ -34,6 +36,11 @@ interface BikeType {
   type_name: string;
 }
 
+interface AccessoryPrices {
+  helmet_price: number;
+  lock_price: number;
+}
+
 // Status-related functions
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -52,6 +59,10 @@ export default function RentalHistoryPage() {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [bikeTypes, setBikeTypes] = useState<BikeType[]>([]);
+  const [accessoryPrices, setAccessoryPrices] = useState<AccessoryPrices>({
+    helmet_price: 0,
+    lock_price: 0
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   const [editingRental, setEditingRental] = useState<Rental | null>(null);
@@ -120,11 +131,26 @@ export default function RentalHistoryPage() {
     }
   }, [supabase]);
 
+  const fetchAccessoryPrices = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('helmet_price, lock_price')
+        .single();
+
+      if (error) throw error;
+      setAccessoryPrices(data || { helmet_price: 0, lock_price: 0 });
+    } catch (error) {
+      console.error('Error fetching accessory prices:', error);
+    }
+  }, [supabase]);
+
   useEffect(() => {
     fetchRentals();
     fetchCustomers();
     fetchBikeTypes();
-  }, [fetchRentals, fetchCustomers, fetchBikeTypes]);
+    fetchAccessoryPrices();
+  }, [fetchRentals, fetchCustomers, fetchBikeTypes, fetchAccessoryPrices]);
 
   const calculateEndDate = (startDate: string, duration: number, durationUnit: string): string => {
     try {
@@ -272,6 +298,15 @@ export default function RentalHistoryPage() {
                           if (unit === 'week') return n === 1 ? 'semana' : 'semanas';
                           return unit;
                         })()}
+                        <span className="text-gray-400 ml-1">
+                          ({item.rental_pricing?.price}€/{(() => {
+                            const unit = item.rental_pricing?.duration_unit;
+                            if (unit === 'hour') return 'hora';
+                            if (unit === 'day') return 'día';
+                            if (unit === 'week') return 'semana';
+                            return unit;
+                          })()})
+                        </span>
                       </div>
                     </div>
                     <span className="font-medium text-gray-900">
@@ -279,6 +314,32 @@ export default function RentalHistoryPage() {
                     </span>
                   </div>
                 ))}
+                {(rental.helmet_quantity || 0) > 0 && (
+                  <div className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                      <span className="font-medium text-gray-900">Casco</span>
+                      <div className="text-gray-500 text-sm">
+                        {rental.helmet_quantity || 0} × {accessoryPrices.helmet_price}€
+                      </div>
+                    </div>
+                    <span className="font-medium text-gray-900">
+                      {((rental.helmet_quantity || 0) * accessoryPrices.helmet_price).toFixed(2)}€
+                    </span>
+                  </div>
+                )}
+                {(rental.lock_quantity || 0) > 0 && (
+                  <div className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                      <span className="font-medium text-gray-900">Candado</span>
+                      <div className="text-gray-500 text-sm">
+                        {rental.lock_quantity || 0} × {accessoryPrices.lock_price}€
+                      </div>
+                    </div>
+                    <span className="font-medium text-gray-900">
+                      {((rental.lock_quantity || 0) * accessoryPrices.lock_price).toFixed(2)}€
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-3 text-sm mt-6">
@@ -317,9 +378,12 @@ export default function RentalHistoryPage() {
                     </svg>
                     Total:
                   </span>
-                  <span className="text-xl font-bold text-gray-900">
-                    {rental.rental_items?.reduce((total, item) => 
-                      total + ((item.rental_pricing?.price || 0) * item.quantity), 0
+                  <span className="price">
+                    {(
+                      (rental.rental_items?.reduce((total, item) => 
+                        total + ((item.rental_pricing?.price || 0) * item.quantity), 0) || 0) +
+                      ((rental.helmet_quantity || 0) * accessoryPrices.helmet_price) +
+                      ((rental.lock_quantity || 0) * accessoryPrices.lock_price)
                     ).toFixed(2)}€
                   </span>
                 </div>
@@ -414,6 +478,15 @@ export default function RentalHistoryPage() {
                             if (unit === 'week') return n === 1 ? 'semana' : 'semanas';
                             return unit;
                           })()}
+                          <span className="text-gray-400 ml-1">
+                            ({item.rental_pricing?.price}€/{(() => {
+                              const unit = item.rental_pricing?.duration_unit;
+                              if (unit === 'hour') return 'hora';
+                              if (unit === 'day') return 'día';
+                              if (unit === 'week') return 'semana';
+                              return unit;
+                            })()})
+                          </span>
                         </div>
                       </div>
                       <span className="font-medium text-gray-900">

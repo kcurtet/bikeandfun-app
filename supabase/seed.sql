@@ -36,7 +36,7 @@ INSERT INTO public.rental_pricing (bike_type_id, duration, duration_unit, price,
 
 -- Insert sample repairs
 INSERT INTO repairs (customer_id, bike_model, repair_start, repair_end, delivery_date, price, notes, status) VALUES
-  (1, 'Trek FX 2', '2024-03-20 10:00:00+00', NULL, '2024-03-21 18:00:00+00', 50.00, 'Cambio de frenos y ajuste de cambios', 'pending'),
+  (1, 'Trek FX 2', NULL, NULL, '2024-03-21 18:00:00+00', 50.00, 'Cambio de frenos y ajuste de cambios', 'pending'),
   (2, 'Specialized Sirrus', '2024-03-19 15:30:00+00', '2024-03-20 12:00:00+00', '2024-03-20 18:00:00+00', 75.00, 'Revisión completa y limpieza', 'completed'),
   (3, 'Giant Escape', NULL, NULL, '2024-03-22 14:00:00+00', 30.00, 'Pinchazo en rueda trasera', 'pending');
 

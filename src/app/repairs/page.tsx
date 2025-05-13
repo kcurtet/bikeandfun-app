@@ -23,6 +23,13 @@ interface Customer {
   name: string;
 }
 
+interface RepairUpdate {
+  status: Repair['status'];
+  repair_start?: string | null;
+  repair_end?: string | null;
+  delivery_date?: string | null;
+}
+
 // Update getStatusColor to use English status values
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -42,7 +49,7 @@ const getStatusColor = (status: string) => {
 };
 
 // Update getNextStatus to use English status values
-const getNextStatus = (currentStatus: string): string => {
+const getNextStatus = (currentStatus: string): Repair['status'] => {
   switch (currentStatus) {
     case 'pending':
       return 'in progress';
@@ -51,7 +58,7 @@ const getNextStatus = (currentStatus: string): string => {
     case 'completed':
       return 'delivered';
     default:
-      return currentStatus;
+      return currentStatus as Repair['status'];
   }
 };
 
@@ -76,6 +83,9 @@ export default function RepairsPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [showEditDateModal, setShowEditDateModal] = useState(false);
+  const [editingRepair, setEditingRepair] = useState<Repair | null>(null);
+  const [newDeliveryDate, setNewDeliveryDate] = useState('');
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     email: '',
@@ -148,7 +158,8 @@ export default function RepairsPage() {
         .insert([{
           customer_id: newRepair.customer_id,
           bike_model: newRepair.bike_model,
-          repair_start: convertToUTC(new Date()),
+          repair_start: null,
+          repair_end: null,
           delivery_date: newRepair.delivery_date ? convertToUTC(new Date(newRepair.delivery_date)) : null,
           price: parseFloat(newRepair.price),
           notes: newRepair.notes,
@@ -199,9 +210,24 @@ export default function RepairsPage() {
     if (nextStatus === currentStatus) return;
 
     try {
+      const updateData: RepairUpdate = { status: nextStatus };
+      
+      // Si estamos iniciando la reparación (cambiando de 'pending' a 'in progress')
+      if (currentStatus === 'pending' && nextStatus === 'in progress') {
+        updateData.repair_start = convertToUTC(new Date()).toISOString();
+      }
+      // Si estamos completando la reparación (cambiando de 'in progress' a 'completed')
+      else if (currentStatus === 'in progress' && nextStatus === 'completed') {
+        updateData.repair_end = convertToUTC(new Date()).toISOString();
+      }
+      // Si estamos entregando la reparación (cambiando de 'completed' a 'delivered')
+      else if (currentStatus === 'completed' && nextStatus === 'delivered') {
+        updateData.delivery_date = convertToUTC(new Date()).toISOString();
+      }
+
       const { error } = await supabase
         .from('repairs')
-        .update({ status: nextStatus })
+        .update(updateData)
         .eq('id', repairId);
 
       if (error) throw error;
@@ -236,6 +262,32 @@ export default function RepairsPage() {
       notes: '',
       status: 'pending'
     });
+  };
+
+  const handleEditDeliveryDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRepair) return;
+
+    try {
+      const { error } = await supabase
+        .from('repairs')
+        .update({ delivery_date: newDeliveryDate ? convertToUTC(new Date(newDeliveryDate)) : null })
+        .eq('id', editingRepair.id);
+
+      if (error) {
+        console.error('Error updating delivery date:', error);
+        setError(`Error al actualizar la fecha: ${error.message}`);
+        return;
+      }
+
+      setShowEditDateModal(false);
+      setEditingRepair(null);
+      setNewDeliveryDate('');
+      fetchRepairs();
+    } catch (error) {
+      console.error('Error updating delivery date:', error);
+      setError(error instanceof Error ? error.message : 'Error inesperado al actualizar la fecha');
+    }
   };
 
   return (
@@ -323,9 +375,23 @@ export default function RepairsPage() {
                     </svg>
                     Entrega Estimada:
                   </span>
-                  <span className="font-medium">
-                    {repair.delivery_date ? formatDateTime(repair.delivery_date) : 'Not set'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">
+                      {repair.delivery_date ? formatDateTime(repair.delivery_date) : 'No establecida'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setEditingRepair(repair);
+                        setNewDeliveryDate(repair.delivery_date || '');
+                        setShowEditDateModal(true);
+                      }}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600 flex items-center gap-2">
@@ -632,6 +698,50 @@ export default function RepairsPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Delivery Date Modal */}
+      {showEditDateModal && editingRepair && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-md md:rounded-lg md:p-6">
+            <div className="p-4 md:p-6">
+              <h2 className="text-2xl font-bold mb-4">Editar Fecha de Entrega Estimada</h2>
+              <form onSubmit={handleEditDeliveryDate}>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="delivery_date">
+                    Fecha de Entrega Estimada
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="delivery_date"
+                    value={newDeliveryDate}
+                    onChange={(e) => setNewDeliveryDate(e.target.value)}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditDateModal(false);
+                      setEditingRepair(null);
+                      setNewDeliveryDate('');
+                    }}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Guardar Cambios
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
-import { formatDateTime } from '@/utils/dateUtils';
+import { formatDateTime, convertToUTC } from '@/utils/dateUtils';
 
 interface Repair {
   id: number;
@@ -23,8 +23,18 @@ interface Customer {
   name: string;
 }
 
+interface RepairUpdate {
+  bike_model?: string;
+  price?: number;
+  notes?: string;
+  status?: Repair['status'];
+  repair_start?: string | null;
+  repair_end?: string | null;
+  delivery_date?: string | null;
+}
+
 // Status-related functions
-const getStatusColor = (status: string) => {
+const getStatusColor = (status: Repair['status']) => {
   switch (status) {
     case 'pending':
       return 'bg-yellow-100 text-yellow-800';
@@ -46,6 +56,8 @@ export default function RepairsHistoryPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedRepair, setSelectedRepair] = useState<Repair | null>(null);
   const [editingRepair, setEditingRepair] = useState<Repair | null>(null);
+  const [editedRepair, setEditedRepair] = useState<Partial<Repair>>({});
+  const [showEditModal, setShowEditModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
@@ -87,39 +99,39 @@ export default function RepairsHistoryPage() {
     fetchCustomers();
   }, [fetchRepairs, fetchCustomers]);
 
-  const handleEditRepair = (repair: Repair) => {
-    setEditingRepair(repair);
-  };
-
-  const handleUpdateRepair = async (e: React.FormEvent) => {
+  const handleEditRepair = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRepair) return;
 
     try {
+      const updateData: RepairUpdate = {
+        bike_model: editedRepair.bike_model,
+        price: editedRepair.price,
+        notes: editedRepair.notes,
+        status: editedRepair.status,
+        repair_start: editedRepair.repair_start ? convertToUTC(new Date(editedRepair.repair_start)).toISOString() : null,
+        repair_end: editedRepair.repair_end ? convertToUTC(new Date(editedRepair.repair_end)).toISOString() : null,
+        delivery_date: editedRepair.delivery_date ? convertToUTC(new Date(editedRepair.delivery_date)).toISOString() : null
+      };
+
       const { error } = await supabase
         .from('repairs')
-        .update({
-          bike_model: editingRepair.bike_model,
-          repair_start: editingRepair.repair_start,
-          repair_end: editingRepair.repair_end,
-          delivery_date: editingRepair.delivery_date,
-          price: editingRepair.price,
-          notes: editingRepair.notes,
-          status: editingRepair.status
-        })
+        .update(updateData)
         .eq('id', editingRepair.id);
 
       if (error) {
         console.error('Error updating repair:', error);
-        throw new Error(`Error updating repair: ${error.message}`);
+        setError(`Error al actualizar la reparación: ${error.message}`);
+        return;
       }
 
-      setRepairs(repairs.map(repair => 
-        repair.id === editingRepair.id ? editingRepair : repair
-      ));
+      setShowEditModal(false);
       setEditingRepair(null);
+      setEditedRepair({});
+      fetchRepairs();
     } catch (error) {
-      console.error('Error in handleUpdateRepair:', error);
+      console.error('Error updating repair:', error);
+      setError(error instanceof Error ? error.message : 'Error inesperado al actualizar la reparación');
     }
   };
 
@@ -274,7 +286,19 @@ export default function RepairsHistoryPage() {
                     {selectedRepair.status}
                   </span>
                   <button
-                    onClick={() => handleEditRepair(selectedRepair)}
+                    onClick={() => {
+                      setEditingRepair(selectedRepair);
+                      setEditedRepair({
+                        bike_model: selectedRepair.bike_model,
+                        price: selectedRepair.price,
+                        notes: selectedRepair.notes,
+                        status: selectedRepair.status,
+                        repair_start: selectedRepair.repair_start,
+                        repair_end: selectedRepair.repair_end,
+                        delivery_date: selectedRepair.delivery_date
+                      });
+                      setShowEditModal(true);
+                    }}
                     className="text-blue-600 hover:text-blue-800 transition-colors"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -322,85 +346,135 @@ export default function RepairsHistoryPage() {
         </div>
       )}
 
-      {/* Edit Repair Modal */}
-      {editingRepair && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold">Editar Reparación</h2>
-              <button
-                onClick={() => setEditingRepair(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      {/* Edit Modal */}
+      {showEditModal && editingRepair && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:rounded-lg md:p-6 overflow-y-auto">
+            <div className="p-4 md:p-6">
+              <h2 className="text-2xl font-bold mb-4">Editar Reparación</h2>
+              <form onSubmit={handleEditRepair}>
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="bike_model">
+                    Modelo de Bicicleta
+                  </label>
+                  <input
+                    type="text"
+                    id="bike_model"
+                    value={editedRepair.bike_model || editingRepair.bike_model}
+                    onChange={(e) => setEditedRepair({ ...editedRepair, bike_model: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="price">
+                    Precio
+                  </label>
+                  <input
+                    type="number"
+                    id="price"
+                    value={editedRepair.price || editingRepair.price}
+                    onChange={(e) => setEditedRepair({ ...editedRepair, price: parseFloat(e.target.value) })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="status">
+                    Estado
+                  </label>
+                  <select
+                    id="status"
+                    value={editedRepair.status || editingRepair.status}
+                    onChange={(e) => setEditedRepair({ ...editedRepair, status: e.target.value as Repair['status'] })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  >
+                    <option value="pending">Pendiente</option>
+                    <option value="in progress">En Progreso</option>
+                    <option value="completed">Completada</option>
+                    <option value="delivered">Entregada</option>
+                    <option value="canceled">Cancelada</option>
+                  </select>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="repair_start">
+                    Fecha de Inicio
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="repair_start"
+                    value={editedRepair.repair_start || editingRepair.repair_start || ''}
+                    onChange={(e) => setEditedRepair({ ...editedRepair, repair_start: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="repair_end">
+                    Fecha de Finalización
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="repair_end"
+                    value={editedRepair.repair_end || editingRepair.repair_end || ''}
+                    onChange={(e) => setEditedRepair({ ...editedRepair, repair_end: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="delivery_date">
+                    Fecha de Entrega
+                  </label>
+                  <input
+                    type="datetime-local"
+                    id="delivery_date"
+                    value={editedRepair.delivery_date || editingRepair.delivery_date || ''}
+                    onChange={(e) => setEditedRepair({ ...editedRepair, delivery_date: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="notes">
+                    Notas
+                  </label>
+                  <textarea
+                    id="notes"
+                    value={editedRepair.notes || editingRepair.notes || ''}
+                    onChange={(e) => setEditedRepair({ ...editedRepair, notes: e.target.value })}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingRepair(null);
+                      setEditedRepair({});
+                    }}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                  >
+                    Guardar Cambios
+                  </button>
+                </div>
+              </form>
             </div>
-
-            <form onSubmit={handleUpdateRepair} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Modelo de Bicicleta</label>
-                <input
-                  type="text"
-                  value={editingRepair.bike_model}
-                  onChange={(e) => setEditingRepair({...editingRepair, bike_model: e.target.value})}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Estado</label>
-                <select
-                  value={editingRepair.status}
-                  onChange={(e) => setEditingRepair({...editingRepair, status: e.target.value as Repair['status']})}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="in progress">En Progreso</option>
-                  <option value="completed">Completada</option>
-                  <option value="delivered">Entregada</option>
-                  <option value="canceled">Cancelada</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Precio</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={editingRepair.price}
-                  onChange={(e) => setEditingRepair({...editingRepair, price: parseFloat(e.target.value)})}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Notas</label>
-                <textarea
-                  value={editingRepair.notes}
-                  onChange={(e) => setEditingRepair({...editingRepair, notes: e.target.value})}
-                  rows={3}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-4">
-                <button
-                  type="button"
-                  onClick={() => setEditingRepair(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  Guardar Cambios
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
-import { convertToUTC, formatDateTime } from '@/utils/dateUtils';
+import { formatDateTime } from '@/utils/dateUtils';
 
 interface Rental {
   id: number;
@@ -22,6 +22,8 @@ interface Rental {
       price: number;
     };
   }[];
+  helmet_quantity?: number;
+  lock_quantity?: number;
 }
 
 interface Customer {
@@ -44,6 +46,11 @@ interface RentalRate {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+interface AccessoryPrices {
+  helmet_price: number;
+  lock_price: number;
 }
 
 // Status-related functions
@@ -76,6 +83,10 @@ export default function RentalsPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [bikeTypes, setBikeTypes] = useState<BikeType[]>([]);
   const [rentalRates, setRentalRates] = useState<RentalRate[]>([]);
+  const [accessoryPrices, setAccessoryPrices] = useState<AccessoryPrices>({
+    helmet_price: 0,
+    lock_price: 0
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
@@ -87,7 +98,9 @@ export default function RentalsPage() {
   const [newRental, setNewRental] = useState({
     customer_id: '',
     status: 'active',
-    items: [] as { bike_type_id: string; rental_pricing_id: string; quantity: number }[]
+    items: [] as { bike_type_id: string; rental_pricing_id: string; quantity: number }[],
+    helmet_quantity: 0,
+    lock_quantity: 0
   });
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   const supabase = createClient();
@@ -112,7 +125,7 @@ export default function RentalsPage() {
           )
         `)
         .eq('status', 'active')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
       setRentals(data || []);
@@ -163,12 +176,27 @@ export default function RentalsPage() {
     }
   }, [supabase]);
 
+  const fetchAccessoryPrices = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('helmet_price, lock_price')
+        .single();
+
+      if (error) throw error;
+      setAccessoryPrices(data || { helmet_price: 0, lock_price: 0 });
+    } catch (error) {
+      console.error('Error fetching accessory prices:', error);
+    }
+  }, [supabase]);
+
   useEffect(() => {
     fetchRentals();
     fetchCustomers();
     fetchBikeTypes();
     fetchRentalRates();
-  }, [fetchRentals, fetchCustomers, fetchBikeTypes, fetchRentalRates]);
+    fetchAccessoryPrices();
+  }, [fetchRentals, fetchCustomers, fetchBikeTypes, fetchRentalRates, fetchAccessoryPrices]);
 
   const handleBikeTypeChange = (index: number, bikeTypeId: string) => {
     const updatedItems = [...newRental.items];
@@ -214,37 +242,42 @@ export default function RentalsPage() {
   const handleAddRental = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { data, error } = await supabase
+      const { data: rentalData, error: rentalError } = await supabase
         .from('rentals')
         .insert([{
-          customer_id: newRental.customer_id,
+          customer_id: parseInt(newRental.customer_id),
           status: newRental.status,
-          start_date: convertToUTC(new Date())
+          start_date: new Date().toISOString(),
+          helmet_quantity: newRental.helmet_quantity,
+          lock_quantity: newRental.lock_quantity
         }])
         .select()
         .single();
 
-      if (error) throw error;
+      if (rentalError) throw rentalError;
 
-      // Insert rental items
-      const rentalItems = newRental.items.map(item => ({
-        rental_id: data.id,
-        bike_type_id: item.bike_type_id,
-        rental_pricing_id: item.rental_pricing_id,
-        quantity: item.quantity
-      }));
+      if (newRental.items.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('rental_items')
+          .insert(
+            newRental.items.map(item => ({
+              rental_id: rentalData.id,
+              bike_type_id: parseInt(item.bike_type_id),
+              rental_pricing_id: parseInt(item.rental_pricing_id),
+              quantity: item.quantity
+            }))
+          );
 
-      const { error: itemsError } = await supabase
-        .from('rental_items')
-        .insert(rentalItems);
-
-      if (itemsError) throw itemsError;
+        if (itemsError) throw itemsError;
+      }
 
       setShowAddModal(false);
       setNewRental({
         customer_id: '',
         status: 'active',
-        items: []
+        items: [],
+        helmet_quantity: 0,
+        lock_quantity: 0
       });
       fetchRentals();
     } catch (error) {
@@ -404,6 +437,32 @@ export default function RentalsPage() {
                     </span>
                   </div>
                 ))}
+                {(rental.helmet_quantity || 0) > 0 && (
+                  <div className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                      <span className="font-medium text-gray-900">Casco</span>
+                      <div className="text-gray-500 text-sm">
+                        {rental.helmet_quantity || 0} × {accessoryPrices.helmet_price}€
+                      </div>
+                    </div>
+                    <span className="font-medium text-gray-900">
+                      {((rental.helmet_quantity || 0) * accessoryPrices.helmet_price).toFixed(2)}€
+                    </span>
+                  </div>
+                )}
+                {(rental.lock_quantity || 0) > 0 && (
+                  <div className="bg-gray-50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                      <span className="font-medium text-gray-900">Candado</span>
+                      <div className="text-gray-500 text-sm">
+                        {rental.lock_quantity || 0} × {accessoryPrices.lock_price}€
+                      </div>
+                    </div>
+                    <span className="font-medium text-gray-900">
+                      {((rental.lock_quantity || 0) * accessoryPrices.lock_price).toFixed(2)}€
+                    </span>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-3 text-sm">
@@ -443,8 +502,11 @@ export default function RentalsPage() {
                     Total:
                   </span>
                   <span className="price">
-                    {rental.rental_items?.reduce((total, item) => 
-                      total + ((item.rental_pricing?.price || 0) * item.quantity), 0
+                    {(
+                      (rental.rental_items?.reduce((total, item) => 
+                        total + ((item.rental_pricing?.price || 0) * item.quantity), 0) || 0) +
+                      ((rental.helmet_quantity || 0) * accessoryPrices.helmet_price) +
+                      ((rental.lock_quantity || 0) * accessoryPrices.lock_price)
                     ).toFixed(2)}€
                   </span>
                 </div>
@@ -476,162 +538,141 @@ export default function RentalsPage() {
 
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white w-full h-full md:h-auto md:max-w-2xl md:max-h-[90vh] md:rounded-lg md:p-6 overflow-y-auto">
-            <div className="p-4 md:p-6">
-              <h2 className="text-2xl font-bold mb-4">Agregar Nuevo Alquiler</h2>
-              <form onSubmit={handleAddRental}>
-                <div className="mb-4">
-                  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="customer">
-                    Cliente
-                  </label>
-                  <div className="flex gap-2">
-                    <select
-                      id="customer"
-                      value={newRental.customer_id}
-                      onChange={(e) => setNewRental(prev => ({ ...prev, customer_id: e.target.value }))}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                      required
-                    >
-                      <option value="">Selecciona un cliente</option>
-                      {customers.map((customer) => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddCustomerModal(true)}
-                      className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 flex items-center gap-2"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM8 11a6 6 0 016 6H2a6 6 0 016-6zM16 7a1 1 0 10-2 0v1h-1a1 1 0 100 2h1v1a1 1 0 102 0v-1h1a1 1 0 100-2h-1V7z" />
-                      </svg>
-                      Agregar Nuevo
-                    </button>
+          <div className="bg-white p-6 rounded-lg w-full max-w-2xl">
+            <h2 className="text-xl font-bold mb-4">Nuevo Alquiler</h2>
+            <form onSubmit={handleAddRental}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Cliente</label>
+                <select
+                  value={newRental.customer_id}
+                  onChange={(e) => setNewRental(prev => ({ ...prev, customer_id: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Seleccionar cliente</option>
+                  {customers.map(customer => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Accesorios</label>
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div>
+                    <label className="block text-sm text-gray-600">Cascos ({accessoryPrices.helmet_price}€/unidad)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newRental.helmet_quantity}
+                      onChange={(e) => setNewRental(prev => ({ ...prev, helmet_quantity: parseInt(e.target.value) || 0 }))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600">Candados ({accessoryPrices.lock_price}€/unidad)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newRental.lock_quantity}
+                      onChange={(e) => setNewRental(prev => ({ ...prev, lock_quantity: parseInt(e.target.value) || 0 }))}
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
                   </div>
                 </div>
+              </div>
 
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Bicicletas</label>
                 {newRental.items.map((item, index) => (
-                  <div key={index} className="mb-4 p-4 border rounded-lg">
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-semibold">Bike {index + 1}</h3>
-                      {index > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => removeBikeFromRental(index)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Bike Type
-                      </label>
+                  <div key={index} className="grid grid-cols-4 gap-4 mt-2">
+                    <div>
                       <select
                         value={item.bike_type_id}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleBikeTypeChange(index, e.target.value)}
-                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                        onChange={(e) => handleBikeTypeChange(index, e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         required
                       >
-                        <option value="">Select a bike type</option>
-                        {bikeTypes.map((bikeType) => (
-                          <option key={bikeType.id} value={bikeType.id}>
-                            {bikeType.type_name}
+                        <option value="">Tipo de bici</option>
+                        {bikeTypes.map(type => (
+                          <option key={type.id} value={type.id}>
+                            {type.type_name}
                           </option>
                         ))}
                       </select>
                     </div>
-                    {item.bike_type_id && (
-                      <>
-                        <div className="mb-4">
-                          <label className="block text-gray-700 text-sm font-bold mb-2">
-                            Duración
-                          </label>
-                          <select
-                            value={item.rental_pricing_id}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleDurationChange(index, e.target.value)}
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                            required
-                          >
-                            <option value="">Selecciona duración</option>
-                            {rentalRates
-                              .filter(r => r.bike_type_id === parseInt(item.bike_type_id))
-                              .map((rate) => (
-                                <option key={rate.id} value={rate.id}>
-                                  {rate.duration} {rate.duration_unit}{rate.duration > 1 ? 's' : ''} - {rate.price.toFixed(2)}€
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                        <div className="mb-4">
-                          <label className="block text-gray-700 text-sm font-bold mb-2">
-                            Cantidad
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const updatedItems = [...newRental.items];
-                              updatedItems[index] = {
-                                ...updatedItems[index],
-                                quantity: parseInt(e.target.value) || 1
-                              };
-                              setNewRental(prev => ({
-                                ...prev,
-                                items: updatedItems
-                              }));
-                            }}
-                            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                            required
-                          />
-                        </div>
-                      </>
-                    )}
+                    <div>
+                      <select
+                        value={item.rental_pricing_id}
+                        onChange={(e) => handleDurationChange(index, e.target.value)}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">Duración</option>
+                        {rentalRates
+                          .filter(rate => !item.bike_type_id || rate.bike_type_id === parseInt(item.bike_type_id))
+                          .map(rate => (
+                            <option key={rate.id} value={rate.id}>
+                              {rate.duration} {rate.duration_unit}(s) - {rate.price}€
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const updatedItems = [...newRental.items];
+                          updatedItems[index] = {
+                            ...updatedItems[index],
+                            quantity: parseInt(e.target.value) || 1
+                          };
+                          setNewRental(prev => ({ ...prev, items: updatedItems }));
+                        }}
+                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => removeBikeFromRental(index)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </div>
                 ))}
+                <button
+                  type="button"
+                  onClick={addNewBikeToRental}
+                  className="mt-2 text-blue-500 hover:text-blue-700"
+                >
+                  + Añadir bicicleta
+                </button>
+              </div>
 
-                <div className="mb-4">
-                  <button
-                    type="button"
-                    onClick={addNewBikeToRental}
-                    className="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300 flex items-center justify-center gap-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                    </svg>
-                    Agregar Otra Bicicleta
-                  </button>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddModal(false);
-                      setNewRental({
-                        customer_id: '',
-                        status: 'active',
-                        items: []
-                      });
-                    }}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    disabled={!newRental.customer_id || newRental.items.length === 0 || newRental.items.some(item => !item.rental_pricing_id)}
-                  >
-                    Agregar Alquiler
-                  </button>
-                </div>
-              </form>
-            </div>
+              <div className="flex justify-end gap-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-white bg-blue-500 rounded hover:bg-blue-600"
+                >
+                  Crear Alquiler
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -17,9 +17,18 @@ interface RentalPricing {
   is_active: boolean;
 }
 
+interface AccessoryPrices {
+  helmet_price: number;
+  lock_price: number;
+}
+
 export default function SettingsPage() {
   const [bikeTypes, setBikeTypes] = useState<BikeType[]>([]);
   const [rentalPricing, setRentalPricing] = useState<RentalPricing[]>([]);
+  const [accessoryPrices, setAccessoryPrices] = useState<AccessoryPrices>({
+    helmet_price: 0,
+    lock_price: 0
+  });
   const [error, setError] = useState<string | null>(null);
   const [showAddBikeTypeModal, setShowAddBikeTypeModal] = useState(false);
   const [showAddPricingModal, setShowAddPricingModal] = useState(false);
@@ -97,10 +106,49 @@ export default function SettingsPage() {
     }
   }, [supabase]);
 
+  const fetchAccessoryPrices = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('helmet_price, lock_price')
+        .single();
+
+      if (error) {
+        console.error('Error fetching accessory prices:', error);
+        throw new Error(`Error fetching accessory prices: ${error.message}`);
+      }
+      setAccessoryPrices(data || { helmet_price: 0, lock_price: 0 });
+    } catch (error) {
+      console.error('Error in fetchAccessoryPrices:', error);
+      setError(error instanceof Error ? error.message : 'Error al cargar los precios de accesorios');
+    }
+  }, [supabase]);
+
+  const handleUpdateAccessoryPrices = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .upsert([{
+          helmet_price: accessoryPrices.helmet_price,
+          lock_price: accessoryPrices.lock_price
+        }]);
+
+      if (error) {
+        console.error('Error updating accessory prices:', error);
+        throw new Error(`Error updating accessory prices: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error in handleUpdateAccessoryPrices:', error);
+      setError(error instanceof Error ? error.message : 'Error al actualizar los precios de accesorios');
+    }
+  };
+
   useEffect(() => {
     fetchBikeTypes();
     fetchRentalPricing();
-  }, [fetchBikeTypes, fetchRentalPricing]);
+    fetchAccessoryPrices();
+  }, [fetchBikeTypes, fetchRentalPricing, fetchAccessoryPrices]);
 
   const handleAddBikeType = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,6 +263,55 @@ export default function SettingsPage() {
       )}
 
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Configuración</h1>
+
+      {/* Accessory Prices Section */}
+      <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Precios de Accesorios</h2>
+        <form onSubmit={handleUpdateAccessoryPrices}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Precio del Casco (€)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={accessoryPrices.helmet_price}
+                onChange={(e) => setAccessoryPrices(prev => ({
+                  ...prev,
+                  helmet_price: parseFloat(e.target.value) || 0
+                }))}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Precio del Candado (€)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={accessoryPrices.lock_price}
+                onChange={(e) => setAccessoryPrices(prev => ({
+                  ...prev,
+                  lock_price: parseFloat(e.target.value) || 0
+                }))}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="mt-4">
+            <button
+              type="submit"
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            >
+              Guardar Precios
+            </button>
+          </div>
+        </form>
+      </div>
 
       {isLoading ? (
         <div className="flex justify-center items-center h-64">
