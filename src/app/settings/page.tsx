@@ -268,7 +268,7 @@ export default function SettingsPage() {
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Precios de Accesorios</h2>
         <form onSubmit={handleUpdateAccessoryPrices}>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Precio del Casco (€)
@@ -282,7 +282,7 @@ export default function SettingsPage() {
                   ...prev,
                   helmet_price: parseFloat(e.target.value) || 0
                 }))}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               />
             </div>
             <div>
@@ -298,14 +298,14 @@ export default function SettingsPage() {
                   ...prev,
                   lock_price: parseFloat(e.target.value) || 0
                 }))}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               />
             </div>
           </div>
           <div className="mt-4">
             <button
               type="submit"
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              className="w-full md:w-auto bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
             >
               Guardar Precios
             </button>
@@ -483,20 +483,20 @@ export default function SettingsPage() {
                 <label className="block text-gray-700 text-sm font-medium mb-2" htmlFor="duration">
                   Duración
                 </label>
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
                   <input
                     type="number"
                     id="duration"
                     value={newPricing.duration}
                     onChange={(e) => setNewPricing({ ...newPricing, duration: e.target.value })}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full sm:flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     min="1"
                     required
                   />
                   <select
                     value={newPricing.duration_unit}
                     onChange={(e) => setNewPricing({ ...newPricing, duration_unit: e.target.value as 'hour' | 'day' | 'week' })}
-                    className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full sm:w-32 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="hour">Hora(s)</option>
                     <option value="day">Día(s)</option>
