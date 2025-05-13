@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 
 interface Customer {
   id: number;
@@ -32,7 +32,7 @@ export default function CustomersPage() {
     email: '',
     phone: '',
   });
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
 
   const fetchCustomers = useCallback(async () => {
     try {

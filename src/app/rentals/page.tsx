@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { convertToUTC, formatDateTime } from '@/utils/dateUtils';
 
@@ -90,7 +90,7 @@ export default function RentalsPage() {
     items: [] as { bike_type_id: string; rental_pricing_id: string; quantity: number }[]
   });
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
 
   const fetchRentals = useCallback(async () => {
     try {

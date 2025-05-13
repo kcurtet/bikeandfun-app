@@ -1,25 +1,29 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 
-interface BikeType {
-  id: number;
-  type_name: string;
-}
-
-interface RentalPricing {
-  price: number;
-}
 
 interface RentalItem {
+  id: number;
   bike_type_id: number;
-  bike_type?: BikeType;
-  rental_pricing?: RentalPricing;
+  rental_pricing_id: number;
+  quantity: number;
+  bike_type?: {
+    type_name: string;
+  };
+  rental_pricing?: {
+    duration: number;
+    duration_unit: string;
+    price: number;
+  };
 }
 
 interface Rental {
   id: number;
+  customer_id: number;
+  status: 'active' | 'completed' | 'canceled';
+  start_date: string;
   created_at: string;
   rental_items: RentalItem[];
 }
@@ -92,7 +96,113 @@ export default function StatisticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
   const [activeTab, setActiveTab] = useState<'rentals' | 'repairs'>('rentals');
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
+
+  const calculateStats = (rentals: Rental[], repairs: Repair[]) => {
+    const rentalStats: RentalStats = {
+      totalRevenue: 0,
+      totalRentals: 0,
+      averagePrice: 0,
+      byBikeType: [],
+      byMonth: [],
+    };
+
+    const repairStats: RepairStats = {
+      totalRevenue: 0,
+      totalRepairs: 0,
+      averagePrice: 0,
+      byBikeType: [],
+      byMonth: [],
+    };
+
+    // Calculate rental statistics
+    rentals.forEach(rental => {
+      if (rental.status === 'canceled') return; // Skip canceled rentals
+
+      const startDate = new Date(rental.created_at);
+      const monthKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+
+      rental.rental_items?.forEach(item => {
+        const bikeType = item.bike_type;
+        if (!bikeType) return;
+
+        const price = item.rental_pricing?.price || 0;
+        const quantity = item.quantity || 0;
+        const totalPrice = price * quantity;
+
+        // Update total revenue
+        rentalStats.totalRevenue += totalPrice;
+
+        // Update rentals by bike type
+        if (!rentalStats.byBikeType.some(b => b.type === bikeType.type_name)) {
+          rentalStats.byBikeType.push({ type: bikeType.type_name, count: 0, revenue: 0, averagePrice: 0 });
+        }
+        const bikeTypeStats = rentalStats.byBikeType.find(b => b.type === bikeType.type_name);
+        if (bikeTypeStats) {
+          bikeTypeStats.count += quantity;
+          bikeTypeStats.revenue += totalPrice;
+          bikeTypeStats.averagePrice = bikeTypeStats.revenue / bikeTypeStats.count;
+        }
+
+        // Update rentals by month
+        if (!rentalStats.byMonth.some(m => m.month === monthKey)) {
+          rentalStats.byMonth.push({ month: monthKey, count: 0, revenue: 0, averagePrice: 0 });
+        }
+        const monthStats = rentalStats.byMonth.find(m => m.month === monthKey);
+        if (monthStats) {
+          monthStats.count += quantity;
+          monthStats.revenue += totalPrice;
+          monthStats.averagePrice = monthStats.revenue / monthStats.count;
+        }
+      });
+
+      rentalStats.totalRentals++;
+    });
+
+    // Calculate repair statistics
+    repairs.forEach(repair => {
+      if (repair.status === 'canceled') return; // Skip canceled repairs
+
+      const startDate = new Date(repair.created_at);
+      const monthKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`;
+
+      // Update total revenue
+      repairStats.totalRevenue += repair.price;
+
+      // Update repairs by bike type
+      if (!repairStats.byBikeType.some(b => b.type === repair.bike_model)) {
+        repairStats.byBikeType.push({ type: repair.bike_model, count: 0, revenue: 0, averagePrice: 0 });
+      }
+      const bikeTypeStats = repairStats.byBikeType.find(b => b.type === repair.bike_model);
+      if (bikeTypeStats) {
+        bikeTypeStats.count++;
+        bikeTypeStats.revenue += repair.price;
+        bikeTypeStats.averagePrice = bikeTypeStats.revenue / bikeTypeStats.count;
+      }
+
+      // Update repairs by month
+      if (!repairStats.byMonth.some(m => m.month === monthKey)) {
+        repairStats.byMonth.push({ month: monthKey, count: 0, revenue: 0, averagePrice: 0 });
+      }
+      const monthStats = repairStats.byMonth.find(m => m.month === monthKey);
+      if (monthStats) {
+        monthStats.count++;
+        monthStats.revenue += repair.price;
+        monthStats.averagePrice = monthStats.revenue / monthStats.count;
+      }
+    });
+
+    // Calculate overall averages
+    if (rentalStats.totalRentals > 0) {
+      rentalStats.averagePrice = rentalStats.totalRevenue / rentalStats.totalRentals;
+    }
+
+    if (repairStats.totalRepairs > 0) {
+      repairStats.averagePrice = repairStats.totalRevenue / repairStats.totalRepairs;
+    }
+
+    return { rentalStats, repairStats };
+  };
 
   const fetchStats = useCallback(async () => {
     setIsLoading(true);
@@ -130,66 +240,10 @@ export default function StatisticsPage() {
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: false });
 
-      if (rentalsError) throw rentalsError;
-
-      // Calculate rental statistics
-      const rentalData = rentals as unknown as Rental[];
-      const totalRentalRevenue = rentalData.reduce((sum, rental) => {
-        return sum + rental.rental_items.reduce((itemSum, item) => {
-          return itemSum + (item.rental_pricing?.price || 0);
-        }, 0);
-      }, 0);
-
-      const totalRentals = rentalData.length;
-      const averageRentalPrice = totalRentals > 0 ? totalRentalRevenue / totalRentals : 0;
-
-      // Calculate statistics by bike type
-      const typeRentals = rentalData.reduce((acc, rental) => {
-        rental.rental_items.forEach(item => {
-          const typeName = item.bike_type?.type_name || 'Unknown';
-          if (!acc[typeName]) {
-            acc[typeName] = { count: 0, revenue: 0 };
-          }
-          acc[typeName].count++;
-          acc[typeName].revenue += item.rental_pricing?.price || 0;
-        });
-        return acc;
-      }, {} as Record<string, { count: number; revenue: number }>);
-
-      const byBikeType = Object.entries(typeRentals).map(([type, stats]) => ({
-        type,
-        count: stats.count,
-        revenue: stats.revenue,
-        averagePrice: stats.revenue / stats.count,
-      }));
-
-      // Calculate statistics by month
-      const rentalByMonth = rentalData.reduce((acc, rental) => {
-        const month = new Date(rental.created_at).toLocaleString('default', { month: 'long' });
-        if (!acc[month]) {
-          acc[month] = { count: 0, revenue: 0 };
-        }
-        acc[month].count++;
-        acc[month].revenue += rental.rental_items.reduce((sum, item) => {
-          return sum + (item.rental_pricing?.price || 0);
-        }, 0);
-        return acc;
-      }, {} as Record<string, { count: number; revenue: number }>);
-
-      const byMonth = Object.entries(rentalByMonth).map(([month, stats]) => ({
-        month,
-        count: stats.count,
-        revenue: stats.revenue,
-        averagePrice: stats.revenue / stats.count,
-      }));
-
-      setRentalStats({
-        totalRevenue: totalRentalRevenue,
-        totalRentals,
-        averagePrice: averageRentalPrice,
-        byBikeType,
-        byMonth,
-      });
+      if (rentalsError) {
+        console.error('Error fetching rentals:', rentalsError);
+        throw new Error(`Error fetching rentals: ${rentalsError.message}`);
+      }
 
       // Fetch repairs
       const { data: repairs, error: repairsError } = await supabase
@@ -198,60 +252,21 @@ export default function StatisticsPage() {
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: false });
 
-      if (repairsError) throw repairsError;
+      if (repairsError) {
+        console.error('Error fetching repairs:', repairsError);
+        throw new Error(`Error fetching repairs: ${repairsError.message}`);
+      }
 
-      // Calculate repair statistics
+      const rentalData = rentals as unknown as Rental[];
       const repairData = repairs as unknown as Repair[];
-      const totalRepairRevenue = repairData.reduce((sum, repair) => sum + repair.price, 0);
-      const totalRepairs = repairData.length;
-      const averageRepairPrice = totalRepairs > 0 ? totalRepairRevenue / totalRepairs : 0;
 
-      // Calculate statistics by bike model
-      const repairTypeStats = repairData.reduce((acc, repair) => {
-        const typeName = repair.bike_model || 'Unknown';
-        if (!acc[typeName]) {
-          acc[typeName] = { count: 0, revenue: 0 };
-        }
-        acc[typeName].count++;
-        acc[typeName].revenue += repair.price;
-        return acc;
-      }, {} as Record<string, { count: number; revenue: number }>);
+      const { rentalStats, repairStats } = calculateStats(rentalData, repairData);
 
-      const repairByBikeType = Object.entries(repairTypeStats).map(([type, stats]) => ({
-        type,
-        count: stats.count,
-        revenue: stats.revenue,
-        averagePrice: stats.revenue / stats.count,
-      }));
-
-      // Calculate statistics by month
-      const repairByMonth = repairData.reduce((acc, repair) => {
-        const month = new Date(repair.created_at).toLocaleString('default', { month: 'long' });
-        if (!acc[month]) {
-          acc[month] = { count: 0, revenue: 0 };
-        }
-        acc[month].count++;
-        acc[month].revenue += repair.price;
-        return acc;
-      }, {} as Record<string, { count: number; revenue: number }>);
-
-      const repairByMonthStats = Object.entries(repairByMonth).map(([month, stats]) => ({
-        month,
-        count: stats.count,
-        revenue: stats.revenue,
-        averagePrice: stats.revenue / stats.count,
-      }));
-
-      setRepairStats({
-        totalRevenue: totalRepairRevenue,
-        totalRepairs,
-        averagePrice: averageRepairPrice,
-        byBikeType: repairByBikeType,
-        byMonth: repairByMonthStats,
-      });
+      setRentalStats(rentalStats);
+      setRepairStats(repairStats);
     } catch (error) {
-      console.error('Error fetching statistics:', error);
-      setError('Error al cargar las estadísticas');
+      console.error('Error in fetchStats:', error);
+      setError(error instanceof Error ? error.message : 'An unexpected error occurred while fetching statistics');
     } finally {
       setIsLoading(false);
     }
@@ -261,82 +276,68 @@ export default function StatisticsPage() {
     fetchStats();
   }, [fetchStats]);
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <span className="block sm:inline">{error}</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Estadísticas</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Estadísticas</h1>
         <div className="flex gap-2">
           <button
             onClick={() => setTimeRange('week')}
             className={`px-4 py-2 rounded-lg ${
               timeRange === 'week'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            Última semana
+            Semana
           </button>
           <button
             onClick={() => setTimeRange('month')}
             className={`px-4 py-2 rounded-lg ${
               timeRange === 'month'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            Último mes
+            Mes
           </button>
           <button
             onClick={() => setTimeRange('year')}
             className={`px-4 py-2 rounded-lg ${
               timeRange === 'year'
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
-            Último año
+            Año
           </button>
         </div>
       </div>
 
-      <div className="mb-8">
-        <div className="flex gap-4 border-b border-gray-200">
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-6">
+        <div className="flex gap-4">
           <button
             onClick={() => setActiveTab('rentals')}
-            className={`px-4 py-2 font-medium ${
+            className={`flex-1 py-3 px-4 rounded-lg text-center font-medium ${
               activeTab === 'rentals'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
             Alquileres
           </button>
           <button
             onClick={() => setActiveTab('repairs')}
-            className={`px-4 py-2 font-medium ${
+            className={`flex-1 py-3 px-4 rounded-lg text-center font-medium ${
               activeTab === 'repairs'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
           >
             Reparaciones
@@ -344,132 +345,122 @@ export default function StatisticsPage() {
         </div>
       </div>
 
-      {activeTab === 'rentals' ? (
-        rentalStats ? (
-          <>
-            {/* Resumen general de alquileres */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Ingresos Totales</h3>
-                <p className="text-3xl font-bold text-blue-600">
-                  {rentalStats.totalRevenue.toFixed(2)}€
-                </p>
-              </div>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Alquileres</h3>
-                <p className="text-3xl font-bold text-blue-600">
-                  {rentalStats.totalRentals}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Precio Promedio</h3>
-                <p className="text-3xl font-bold text-blue-600">
-                  {rentalStats.averagePrice.toFixed(2)}€
-                </p>
-              </div>
-            </div>
-
-            {/* Estadísticas por tipo de bicicleta */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Ingresos por Tipo de Bicicleta</h2>
-              <div className="space-y-4">
-                {rentalStats.byBikeType.map((type) => (
-                  <div key={type.type} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <h3 className="text-base font-medium text-gray-900">{type.type}</h3>
-                      <p className="text-sm text-gray-600">{type.count} alquileres</p>
-                    </div>
-                    <p className="text-lg font-semibold text-blue-600">{type.revenue.toFixed(2)}€</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Estadísticas mensuales */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Ingresos Mensuales</h2>
-              <div className="space-y-4">
-                {rentalStats.byMonth.map((month) => (
-                  <div key={month.month} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <h3 className="text-base font-medium text-gray-900">{month.month}</h3>
-                      <p className="text-sm text-gray-600">{month.count} alquileres</p>
-                    </div>
-                    <p className="text-lg font-semibold text-blue-600">{month.revenue.toFixed(2)}€</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-6 text-center">
-            <p className="text-gray-600">No hay datos disponibles para el período seleccionado</p>
-          </div>
-        )
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
       ) : (
-        repairStats ? (
-          <>
-            {/* Resumen general de reparaciones */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {activeTab === 'rentals' ? (
+            <>
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Ingresos Totales</h3>
-                <p className="text-3xl font-bold text-blue-600">
-                  {repairStats.totalRevenue.toFixed(2)}€
-                </p>
-              </div>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Reparaciones</h3>
-                <p className="text-3xl font-bold text-blue-600">
-                  {repairStats.totalRepairs}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Precio Promedio</h3>
-                <p className="text-3xl font-bold text-blue-600">
-                  {repairStats.averagePrice.toFixed(2)}€
-                </p>
-              </div>
-            </div>
-
-            {/* Estadísticas por estado */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Reparaciones por Estado</h2>
-              <div className="space-y-4">
-                {repairStats.byBikeType.map((status) => (
-                  <div key={status.type} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <h3 className="text-base font-medium text-gray-900">
-                        {status.type.charAt(0).toUpperCase() + status.type.slice(1)}
-                      </h3>
-                      <p className="text-sm text-gray-600">{status.count} reparaciones</p>
-                    </div>
-                    <p className="text-lg font-semibold text-blue-600">{status.revenue.toFixed(2)}€</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen de Alquileres</h3>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Ingresos Totales</p>
+                    <p className="text-2xl font-bold text-gray-900">{rentalStats.totalRevenue.toFixed(2)}€</p>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Estadísticas mensuales */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Ingresos Mensuales</h2>
-              <div className="space-y-4">
-                {repairStats.byMonth.map((month) => (
-                  <div key={month.month} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
-                    <div>
-                      <h3 className="text-base font-medium text-gray-900">{month.month}</h3>
-                      <p className="text-sm text-gray-600">{month.count} reparaciones</p>
-                    </div>
-                    <p className="text-lg font-semibold text-blue-600">{month.revenue.toFixed(2)}€</p>
+                  <div>
+                    <p className="text-sm text-gray-600">Total de Alquileres</p>
+                    <p className="text-2xl font-bold text-gray-900">{rentalStats.totalRentals}</p>
                   </div>
-                ))}
+                  <div>
+                    <p className="text-sm text-gray-600">Precio Promedio</p>
+                    <p className="text-2xl font-bold text-gray-900">{rentalStats.averagePrice.toFixed(2)}€</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="bg-white rounded-lg shadow-md p-6 text-center">
-            <p className="text-gray-600">No hay datos disponibles para el período seleccionado</p>
-          </div>
-        )
+
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Tipo de Bicicleta</h3>
+                <div className="space-y-4">
+                  {rentalStats.byBikeType.map((stat) => (
+                    <div key={stat.type} className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium text-gray-900">{stat.type}</p>
+                        <p className="text-sm text-gray-600">{stat.count} alquileres</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-gray-900">{stat.revenue.toFixed(2)}€</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Mes</h3>
+                <div className="space-y-4">
+                  {rentalStats.byMonth.map((stat) => (
+                    <div key={stat.month} className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium text-gray-900">{stat.month}</p>
+                        <p className="text-sm text-gray-600">{stat.count} alquileres</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-gray-900">{stat.revenue.toFixed(2)}€</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Resumen de Reparaciones</h3>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Ingresos Totales</p>
+                    <p className="text-2xl font-bold text-gray-900">{repairStats.totalRevenue.toFixed(2)}€</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Total de Reparaciones</p>
+                    <p className="text-2xl font-bold text-gray-900">{repairStats.totalRepairs}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Precio Promedio</p>
+                    <p className="text-2xl font-bold text-gray-900">{repairStats.averagePrice.toFixed(2)}€</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Modelo de Bicicleta</h3>
+                <div className="space-y-4">
+                  {repairStats.byBikeType.map((stat) => (
+                    <div key={stat.type} className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium text-gray-900">{stat.type}</p>
+                        <p className="text-sm text-gray-600">{stat.count} reparaciones</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-gray-900">{stat.revenue.toFixed(2)}€</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Por Mes</h3>
+                <div className="space-y-4">
+                  {repairStats.byMonth.map((stat) => (
+                    <div key={stat.month} className="flex justify-between items-center">
+                      <div>
+                        <p className="font-medium text-gray-900">{stat.month}</p>
+                        <p className="text-sm text-gray-600">{stat.count} reparaciones</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-gray-900">{stat.revenue.toFixed(2)}€</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

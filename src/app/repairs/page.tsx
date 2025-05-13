@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClient } from '@/utils/supabase/client';
 import Link from 'next/link';
 import { convertToUTC, formatDateTime } from '@/utils/dateUtils';
 
@@ -91,20 +91,32 @@ export default function RepairsPage() {
     status: 'pending' as const
   });
   const [selectedRepair, setSelectedRepair] = useState<Repair | null>(null);
-  const supabase = createClientComponentClient();
+  const supabase = createClient();
 
   const fetchRepairs = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('repairs')
         .select('*')
-        .not('status', 'in', ['canceled', 'delivered'])
+        .not('status', 'eq', 'canceled')
+        .not('status', 'eq', 'delivered')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setRepairs(data || []);
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(`Error fetching repairs: ${error.message}`);
+      }
+
+      if (!data) {
+        console.warn('No repairs data returned from Supabase');
+        setRepairs([]);
+        return;
+      }
+
+      setRepairs(data);
     } catch (error) {
-      console.error('Error fetching repairs:', error);
+      console.error('Error in fetchRepairs:', error);
+      setError(error instanceof Error ? error.message : 'An unexpected error occurred while fetching repairs');
     } finally {
       setIsLoading(false);
     }
