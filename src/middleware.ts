@@ -2,11 +2,6 @@ import { type NextRequest } from 'next/server'
 import { updateSession } from '@/utils/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
-  // Verificar que las peticiones de login usen POST
-  if (request.nextUrl.pathname === '/login' && request.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
-  }
-  
   return await updateSession(request)
 }
 
